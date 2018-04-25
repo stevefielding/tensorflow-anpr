@@ -4,9 +4,8 @@ If view mode is enabled, then the record file will not be written
 
 Example usage:
      python build_anpr_records.py \
-    --dataset_file=SJ7STAR_images/imageSets/train.txt \
     --image_dir=SJ7STAR_images \
-    --output_path=SJ7STAR_images/records/training.record \
+    --record_dir=SJ7STAR_images/records \
     --annotations_dir=SJ7STAR_images/2018_02_24_9-00_ann \
     --label_map_file=SJ7STAR_images/records/classes.pbtxt \
     --view_mode=False
@@ -25,16 +24,17 @@ import PIL.Image
 import tensorflow as tf
 import cv2
 import re
+from imutils import paths
+from sklearn.model_selection import train_test_split
 
 from object_detection.utils import dataset_util
 from object_detection.utils import label_map_util
 
 flags = tf.app.flags
 flags.DEFINE_string('image_dir', '', 'Root directory to images.')
-flags.DEFINE_string('dataset_file', '', 'File defining the set of images to use.')
 flags.DEFINE_string('annotations_dir', 'Annotations',
                     '(Relative) path to annotations directory.')
-flags.DEFINE_string('output_path', '', 'Path to output TFRecord')
+flags.DEFINE_string('record_dir', '', 'Path to output TFRecord')
 flags.DEFINE_string('label_map_file', '',
                     'label map proto file')
 flags.DEFINE_boolean('ignore_difficult_instances', False, 'Whether to ignore '
@@ -43,6 +43,12 @@ flags.DEFINE_boolean('view_mode', False, 'View mode enable')
 
 FLAGS = flags.FLAGS
 
+def create_train_test_split(annotations_dir):
+  xmlPaths = paths.list_files(annotations_dir, validExts=(".xml"))
+  # create training and testing splits from our data dictionary
+  (trainFiles, testFiles) = train_test_split(list(xmlPaths),
+    test_size=0.15, random_state=42)
+  return (trainFiles, testFiles)
 
 def dict_to_tf_example(data,
                        dataset_directory,
@@ -157,38 +163,57 @@ def dict_to_tf_example(data,
   }))
   return example
 
-
-def main(_):
-
-  image_dir = FLAGS.image_dir
-  annotations_dir = FLAGS.annotations_dir
-  dataset_file = FLAGS.dataset_file
-  label_map_file = FLAGS.label_map_file
-  view_mode = FLAGS.view_mode
+def create_record(imageList, image_dir, label_map_file, recordFilePath, view_mode=False, ignore_difficult_instances=False):
+  # for every xml file, read the annotation and the image file, and add to the record file
 
   if view_mode == False:
-    writer = tf.python_io.TFRecordWriter(FLAGS.output_path)
+    writer = tf.python_io.TFRecordWriter(recordFilePath)
 
   label_map_dict = label_map_util.get_label_map_dict(label_map_file)
 
-  logging.info('Reading from %s dataset.', dataset_file)
-  examples_list = dataset_util.read_examples_list(dataset_file)
-  for idx, example in enumerate(examples_list):
+  logging.info('Reading from dataset.')
+  for idx, example in enumerate(imageList):
     if idx % 100 == 0:
-      logging.info('On image %d of %d', idx, len(examples_list))
-    path = os.path.join(annotations_dir, example + '.xml')
-    with tf.gfile.GFile(path, 'r') as fid:
+      logging.info('On image %d of %d', idx, len(imageList))
+    with tf.gfile.GFile(example, 'r') as fid:
       xml_str = fid.read()
     xml = etree.fromstring(xml_str)
     data = dataset_util.recursive_parse_xml_to_dict(xml)['annotation']
     tf_example = dict_to_tf_example(data, image_dir, label_map_dict,
-                                    FLAGS.ignore_difficult_instances, view_mode=view_mode)
+                                    ignore_difficult_instances, view_mode=view_mode)
     if view_mode == False:
       writer.write(tf_example.SerializeToString())
 
   if view_mode == False:
     writer.close()
 
+
+def main(_):
+
+  image_dir = FLAGS.image_dir
+  annotations_dir = FLAGS.annotations_dir
+  label_map_file = FLAGS.label_map_file
+  view_mode = FLAGS.view_mode
+
+  # split the dataset into training data and testing data
+  # Note that we are splitting the xml annotation files
+  # If an image does not have a corresponding annotation file
+  # it will not be used
+  (trainList,testList) = create_train_test_split(annotations_dir)
+
+  # create the training record
+  trainingFilePath = os.path.join(FLAGS.record_dir , "training.record")
+  print("[INFO] Creating \"{}\"".format(trainingFilePath))
+  create_record(trainList, image_dir, label_map_file,
+                trainingFilePath, view_mode=view_mode,
+                ignore_difficult_instances=FLAGS.ignore_difficult_instances)
+
+  # create the testing record
+  testingFilePath = os.path.join(FLAGS.record_dir , "testing.record")
+  print("[INFO] Creating \"{}\"".format(testingFilePath))
+  create_record(testList, image_dir, label_map_file,
+                testingFilePath, view_mode=view_mode,
+                ignore_difficult_instances=FLAGS.ignore_difficult_instances)
 
 if __name__ == '__main__':
   tf.app.run()
