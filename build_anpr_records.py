@@ -43,6 +43,8 @@ flags.DEFINE_boolean('view_mode', False, 'View mode enable')
 
 FLAGS = flags.FLAGS
 
+logging.basicConfig(filename='build_anpr_records.log', level=logging.DEBUG)
+
 def create_train_test_split(annotations_dir):
   xmlPaths = paths.list_files(annotations_dir, validExts=(".xml"))
   # create training and testing splits from our data dictionary
@@ -200,17 +202,19 @@ def main(_):
   # If an image does not have a corresponding annotation file
   # it will not be used
   (trainList,testList) = create_train_test_split(annotations_dir)
+  print("[INFO] Found {} annotated images".format(len(trainList) + len(testList)))
+  print("[INFO] Splitting into {} training images, and {} testing images".format(len(trainList), len(testList)))
 
   # create the training record
   trainingFilePath = os.path.join(FLAGS.record_dir , "training.record")
-  print("[INFO] Creating \"{}\"".format(trainingFilePath))
+  print("[INFO] Writing \"{}\", containing {} images".format(trainingFilePath, len(trainList)))
   create_record(trainList, image_dir, label_map_file,
                 trainingFilePath, view_mode=view_mode,
                 ignore_difficult_instances=FLAGS.ignore_difficult_instances)
 
   # create the testing record
   testingFilePath = os.path.join(FLAGS.record_dir , "testing.record")
-  print("[INFO] Creating \"{}\"".format(testingFilePath))
+  print("[INFO] Writing \"{}\", containing {} images".format(testingFilePath, len(testList)))
   create_record(testList, image_dir, label_map_file,
                 testingFilePath, view_mode=view_mode,
                 ignore_difficult_instances=FLAGS.ignore_difficult_instances)
