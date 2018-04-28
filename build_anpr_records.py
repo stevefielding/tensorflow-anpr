@@ -141,6 +141,7 @@ def dict_to_tf_example(data,
   if view_mode == True:
     # show the output image
     cv2.imshow("Image", cvImage)
+    cv2.imwrite("myImage.jpg",cvImage)
     cv2.waitKey(0)
 
   example = tf.train.Example(features=tf.train.Features(feature={
