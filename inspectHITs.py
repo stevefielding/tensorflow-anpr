@@ -1,14 +1,15 @@
 # -------------------- inspectHITs.py -------------------------
-# python inspectHITs.py --csvFileIn ../../datasets/lplates_smallset/hand_labelled/images_labelled/labels.txt  \
-# --csvFileOut ../../datasets/lplates_smallset/hand_labelled/images_labelled/labelsNew.txt \
-# --imagePath ../../datasets/lplates_smallset/hand_labelled/images_labelled/img
+# python inspectHITs.py --csvFileIn Batch_3211133_batch_results.csv \
+# --imagePath SJ7STAR_images/2018_03_02 --csvFileOut batch_results_checked.csv
 
-# Read a label.txt file and extract the contents to a dictionary where the keys are the filenames
-# and the values are the plate text.
-# Now display the images with an embedded text box containing the plate text that corresponds with the
-# filename key. The user has the opportunity to view the plate text in the image and compare to the plate text
-# retrieved from the lables.txt file. The text can be left unmodified or edited. Either way the plate text and
-# filename are written to the new output label file.
+# Use this application to review a downloaded MTurk csv results file
+# and generate a a modified csv results file with the accept and reject entries
+# filled in. An 'x' in the accept column accepts the HIT, or any text in the  reject
+# column rejects the HIT
+# Loops over all the HITs, diplaying the images, bounding boxes and box labels
+# Displays a text box where the response can be entered. If the entry is 'x'
+# this is placed in the accept column, any other text is placed in the reject column
+# Once complete, upload the new csv file to MTurk
 
 from imutils import paths
 from PIL import Image, ImageDraw, ImageFont
@@ -66,10 +67,11 @@ csvWriteFile = open(args["csvFileOut"], 'w', newline='')
 csvWriter = csv.DictWriter(csvWriteFile, fieldnames=csvReader.fieldnames)
 csvWriter.writeheader()
 
-
-# For every file, add a new line of text to the comma delimited label file
-# Each line will contain the old fileName, new file name, and license plate characters
+# Loop over the lines in the csv file. Each line read as a dictionary
 for hitDict in csvReader:
+  if hitDict["AssignmentStatus"] != "Submitted":
+    csvWriter.writerow(hitDict)
+    continue
   imagePath = os.path.join("SJ7STAR_images" , hitDict["Input.image_url"])
 
   # Read the image
@@ -80,11 +82,12 @@ for hitDict in csvReader:
   annotations = hitDict["Answer.annotation_data"]
   matches = re.finditer(r"\{(.*?)\}", annotations)
   font = ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf", 30)
-  # if BDV part number found in line, then convert to Steris part number
+  # loop over all the boxes
   for matchNum, match in enumerate(matches):
     locDict = dict()
     match = match.group()
     annSplit = match.split(",")
+    # loop over the box location data
     for loc in annSplit:
       locSplit = loc.split(":")
       locDict[locSplit[0].strip("\"{}")] = locSplit[1].strip("\"{}")
