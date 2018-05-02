@@ -1,4 +1,5 @@
-
+# usage
+# python genImageListForAWS.py --image_dir SJ7STAR_images/2018_03_02 --output_file image_catalog.csv
 from imutils import paths
 import argparse
 import os
