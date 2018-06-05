@@ -33,7 +33,7 @@ cd tensorflow/models/research/object_detection
 
 ###### Training
 workon tensoflow  
-python train.py --logtostderr --pipeline_config_path ../anpr/experiment_faster_rcnn/training/faster_rcnn_anpr.config --train_dir ../anpr/experiment_faster_rcnn/training  
+python train.py --logtostderr --pipeline_config_path ../anpr/experiment_faster_rcnn/2018_06_01/training/faster_rcnn_anpr.config --train_dir ../anpr/experiment_faster_rcnn/2018_06_01/training  
 
 ###### Eval
 If you are running the eval on CPU, then limit the number of images to evaluate by modifing your config file:  
@@ -43,8 +43,17 @@ If you are running the eval on CPU, then limit the number of images to evaluate 
 New terminal  
 workon tensoflow  
 export CUDA_VISIBLE_DEVICES=""  
-python eval.py --logtostderr --checkpoint_dir ../anpr/experiment_faster_rcnn/training --pipeline_config_path ../anpr/experiment_faster_rcnn/training/faster_rcnn_anpr.config --eval_dir ../anpr/experiment_faster_rcnn/evaluation  
+python eval.py --logtostderr --checkpoint_dir ../anpr/experiment_faster_rcnn/2018_06_01/training --pipeline_config_path ../anpr/experiment_faster_rcnn/2018_06_01/training/faster_rcnn_anpr.config --eval_dir ../anpr/experiment_faster_rcnn/2018_06_01/evaluation  
 
 cd tensorflow/models/research  
 workon tensoflow  
 tensorboard --logdir anpr/experiment_faster_rcnn  
+
+###### Export model
+cd tensorflow/models/research/object_detection
+workon tensorflow
+python export_inference_graph.py --input_type image_tensor --pipeline_config_path ../anpr/experiment_faster_rcnn/2018_06_01/training/faster_rcnn_anpr.config --trained_checkpoint_prefix ../anpr/experiment_faster_rcnn/2018_06_01/training/model.ckpt-50000  --output_directory ../anpr/experiment_faster_rcnn/2018_06_01/exported_model
+
+###### Predict
+workon tensorflow
+python predict.py --model SJ7STAR_images/experiment_faster_rcnn/2018_06_01/exported_model/frozen_inference_graph.pb --labels SJ7STAR_images/records/classes.pbtxt --image SJ7STAR_images/2018_02_26 --num-classes 37

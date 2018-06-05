@@ -46,9 +46,21 @@ FLAGS = flags.FLAGS
 logging.basicConfig(filename='build_anpr_records.log', level=logging.DEBUG)
 
 def create_train_test_split(annotations_dir):
+  xmlVerifiedPaths = []
   xmlPaths = paths.list_files(annotations_dir, validExts=(".xml"))
+
+  # Read each xml file and check if the annotation has been verified.
+  # If it has, then add to the verified list
+  for xmlPath in xmlPaths:
+    xmlFile = open(xmlPath, "r")
+    xmlString = xmlFile.read()
+    xmlFile.close()
+    m = re.search(r"<annotation.*?verified=\"yes\"", xmlString)
+    if m != None:
+      xmlVerifiedPaths.append(xmlPath)
+
   # create training and testing splits from our data dictionary
-  (trainFiles, testFiles) = train_test_split(list(xmlPaths),
+  (trainFiles, testFiles) = train_test_split(list(xmlVerifiedPaths),
     test_size=0.15, random_state=42)
   return (trainFiles, testFiles)
 

@@ -86,7 +86,8 @@ for hitDict in csvReader:
 
   acceptCnt += 1
   # open the xml output file for writing
-  xmlPath = args["xmlPath"] + os.sep + ('').join(imageFilename.split(".") [:-1]) + ".xml"
+  fnMatch = re.search(r"(.*)\..*$", imageFilename)
+  xmlPath = args["xmlPath"] + os.sep + fnMatch.group(1) + ".xml"
   xmlFile = open(xmlPath, "w")
   xmlFile.write(xmlStart(imagePath))
 

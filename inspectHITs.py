@@ -1,6 +1,6 @@
 # -------------------- inspectHITs.py -------------------------
 # python inspectHITs.py --csvFileIn Batch_3211133_batch_results.csv \
-# --imagePath SJ7STAR_images/2018_03_02 --csvFileOut batch_results_checked.csv
+# --imagePathRoot SJ7STAR_images --csvFileOut batch_results_checked.csv
 
 # Use this application to review a downloaded MTurk csv results file
 # and generate a a modified csv results file with the accept and reject entries
@@ -10,6 +10,15 @@
 # Displays a text box where the response can be entered. If the entry is 'x'
 # this is placed in the accept column, any other text is placed in the reject column
 # Once complete, upload the new csv file to MTurk
+
+# ---- Format of downloaded csv file ---
+# The csv file that is retrieved from the first submission has "AssignmentStatus"
+# assigned "Submitted"
+# Every entry will have to be checked and "Approve" and "Reject" fields assgned appropriately
+# When the csv file is returned from the second submission, it gets a more complicated
+# The "Reject" assignment is moved to "RequesterFeedback"
+# There will be two entries for each "Input.image_url". One with "AssignmentStatus" equal
+# to "Rejected" or "Accepted", and one with "AssignmentStatus" equal to "Submitted"
 
 from imutils import paths
 from PIL import Image, ImageDraw, ImageFont
@@ -28,7 +37,7 @@ ap.add_argument("-l", "--csvFileIn", required=True,
   help="path to labels input file")
 ap.add_argument("-o", "--csvFileOut", required=True,
   help="path to labels output file")
-ap.add_argument("-i", "--imagePath", required=True,
+ap.add_argument("-i", "--imagePathRoot", required=True,
   help="path to image files")
 args = vars(ap.parse_args())
 
@@ -36,22 +45,15 @@ args = vars(ap.parse_args())
 if os.path.exists(args["csvFileIn"]) == False:
   print("[ERROR]: --csvFileIn \"{}\" does not exist".format(args["csvFileIn"]))
   sys.exit()
-if os.path.exists(args["imagePath"]) == False:
-  print("[ERROR]: --imagePath \"{}\" does not exist".format(args["imagePath"]))
+if os.path.exists(args["imagePathRoot"]) == False:
+  print("[ERROR]: --imagePathRoot \"{}\" does not exist".format(args["imagePathRoot"]))
   sys.exit()
-if os.path.exists(args["csvFileOut"]) == True:
-  print("[ERROR]: --csvFileOut \"{}\" already exists. Delete first".format(args["csvFileOut"]))
-  #sys.exit()
 
 # read the csv file and copy to dictionary
 csvFileIn = open(args["csvFileIn"], "r")
 csvReader = csv.DictReader(csvFileIn)
 
 #print("[INFO] Number of HITs in the file: {}".format(len(csvSplit) - 1))
-
-# get list of all input image files,
-# and open the labels output file in write mode.
-myPaths = paths.list_files(args["imagePath"], validExts=(".jpg"))
 
 # return key event handler
 def return_key_exit_mainloop (event):
@@ -62,19 +64,52 @@ root = tkinter.Tk()
 root.geometry('+%d+%d' % (100,100))
 root.bind('<Return>', return_key_exit_mainloop)
 
-# open the csv output file as a dictionary
-csvWriteFile = open(args["csvFileOut"], 'w', newline='')
+# Process the csv output file
+csvImagesChecked = dict()
+# If the csv output file already exists, then open the file and read all the image file names,
+# add them to a set, and then close the csv file
+if os.path.exists(args["csvFileOut"]) == True:
+  print("[INFO] csv output file already exists. Appending data")
+  csvFileOutExists = True
+  csvFileOut = open(args["csvFileOut"], "r")
+  csvOutReader = csv.DictReader(csvFileOut)
+  # Loop over all entries in the csv output, and for each "Input.image_url"
+  # add the "AssignmentStatus"
+  for hitDict in csvOutReader:
+    if hitDict["Input.image_url"] in csvImagesChecked:
+      csvImagesChecked[hitDict["Input.image_url"]].append(hitDict["AssignmentStatus"])
+    else:
+      csvImagesChecked[hitDict["Input.image_url"]] = [hitDict["AssignmentStatus"]]
+  csvFileOut.close()
+# else the csv output file does not exist. Set a flag 'csvFileOutExists'
+else:
+  print("[INFO] csv output file not found. Creating new file")
+  csvFileOutExists = False
+# open the csv output file in append mode. If it does not exist, create it, and add header
+csvWriteFile = open(args["csvFileOut"], 'a+', newline='')
 csvWriter = csv.DictWriter(csvWriteFile, fieldnames=csvReader.fieldnames)
-csvWriter.writeheader()
+if csvFileOutExists == False:
+  csvWriter.writeheader()
 
 # Loop over the lines in the csv file. Each line read as a dictionary
+hitProcessedAlready = False
 for hitDict in csvReader:
-  if hitDict["AssignmentStatus"] != "Submitted":
+  # if HIT has already been copied to csv output file, then break from the loop
+  localImagePath = hitDict["Input.image_url"]
+  hitAssignmentStatus = csvImagesChecked.get(localImagePath)
+  for status in hitAssignmentStatus:
+    if status == hitDict["AssignmentStatus"]:
+      hitProcessedAlready = True
+      continue
+  if hitProcessedAlready == True:
+    continue
+  # if HIT "AssignmentStatus" is not "Submitted", then break from loop
+  if hitDict["AssignmentStatus"] != "Submitted" or hitProcessedAlready == True:
     csvWriter.writerow(hitDict)
     continue
-  imagePath = os.path.join("SJ7STAR_images" , hitDict["Input.image_url"])
 
   # Read the image
+  imagePath = os.path.join(args["imagePathRoot"], hitDict["Input.image_url"])
   image = Image.open(imagePath)
   draw = ImageDraw.Draw(image)
 
@@ -128,6 +163,7 @@ for hitDict in csvReader:
   else:
     hitDict["Reject"] = acceptReject
   csvWriter.writerow(hitDict)
+  csvWriteFile.flush()
 
   # Finished with the window, destroy
   label_image.destroy()
