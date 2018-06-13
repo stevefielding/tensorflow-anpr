@@ -3,12 +3,10 @@ Enable view_mode if you wish to check your annotations
 If view mode is enabled, then the record file will not be written
 
 Example usage:
-     python build_anpr_records.py \
-    --image_dir=SJ7STAR_images \
-    --record_dir=SJ7STAR_images/records \
-    --annotations_dir=SJ7STAR_images/2018_02_24_9-00_ann \
-    --label_map_file=SJ7STAR_images/records/classes.pbtxt \
-    --view_mode=False
+  python build_anpr_records.py \
+  --image_dir=images --record_dir=datasets/records --annotations_dir=images \
+  --label_map_file=datasets/records/classes.pbtxt \
+  --view_mode=False
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -24,7 +22,6 @@ import PIL.Image
 import tensorflow as tf
 import cv2
 import re
-from imutils import paths
 from sklearn.model_selection import train_test_split
 
 from object_detection.utils import dataset_util
@@ -45,9 +42,30 @@ FLAGS = flags.FLAGS
 
 logging.basicConfig(filename='build_anpr_records.log', level=logging.DEBUG)
 
+
+def list_files(basePath, validExts=(".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"), contains=None):
+  # loop over the directory structure
+  for (rootDir, dirNames, filenames) in os.walk(basePath, followlinks=True):
+    # loop over the filenames in the current directory
+    for filename in filenames:
+      # if the contains string is not none and the filename does not contain
+      # the supplied string, then ignore the file
+      if contains is not None and filename.find(contains) == -1:
+        continue
+
+      # determine the file extension of the current file
+      ext = filename[filename.rfind("."):].lower()
+
+      # check to see if the file is an image and should be processed
+      if ext.endswith(validExts):
+        # construct the path to the image and yield it
+        imagePath = os.path.join(rootDir, filename).replace(" ", "\\ ")
+        yield imagePath
+
+
 def create_train_test_split(annotations_dir):
   xmlVerifiedPaths = []
-  xmlPaths = paths.list_files(annotations_dir, validExts=(".xml"))
+  xmlPaths = list_files(annotations_dir, validExts=(".xml"))
 
   # Read each xml file and check if the annotation has been verified.
   # If it has, then add to the verified list
@@ -66,7 +84,7 @@ def create_train_test_split(annotations_dir):
 
 def dict_to_tf_example(data,
                        dataset_directory,
-                       label_map_dict,
+                       label_map_dict, xmlFilePath,
                        ignore_difficult_instances=False,
                        view_mode=False):
   """Convert XML derived dict to tf.Example proto.
@@ -91,8 +109,13 @@ def dict_to_tf_example(data,
   # data['folder'] should be the name of a sub-directory of datset_directory
   # If you inspect an xml annotation file, 'folder' specifies a single folder containing the
   # corresponding image. 'path' specifies a full absolute path
-  img_path = os.path.join(data['folder'], data['filename'])
-  full_path = os.path.join(dataset_directory, img_path)
+  filePathRoot = xmlFilePath.split(os.sep)
+  filePathRoot = filePathRoot [:-2]
+  filePathRoot = (os.sep).join(filePathRoot)
+  filePathRoot = os.path.join(filePathRoot, data['folder'])
+  #img_path = os.path.join(data['folder'], data['filename'])
+  #full_path = os.path.join(dataset_directory, img_path)
+  full_path = os.path.join(filePathRoot, data['filename'])
   if view_mode == True:
     cvImage = cv2.imread(full_path)
   with tf.gfile.GFile(full_path, 'rb') as fid:
@@ -194,7 +217,7 @@ def create_record(imageList, image_dir, label_map_file, recordFilePath, view_mod
       xml_str = fid.read()
     xml = etree.fromstring(xml_str)
     data = dataset_util.recursive_parse_xml_to_dict(xml)['annotation']
-    tf_example = dict_to_tf_example(data, image_dir, label_map_dict,
+    tf_example = dict_to_tf_example(data, image_dir, label_map_dict, example,
                                     ignore_difficult_instances, view_mode=view_mode)
     if view_mode == False:
       writer.write(tf_example.SerializeToString())
