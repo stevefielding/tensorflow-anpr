@@ -120,10 +120,20 @@ python export_inference_graph.py --input_type image_tensor \
 --trained_checkpoint_prefix ../anpr/experiment_faster_rcnn/2018_06_12/training/model.ckpt-60296 \  
 --output_directory ../anpr/experiment_faster_rcnn/2018_06_12/exported_model
 ````
-###### Predict
+###### predict.py
+Back to this project directory to run predict.py
+Test your exported model against an image dataset.
+Prints the detected plate text, and displays the annotated image.
 ````
 workon tensorflow  
 python predict.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \  
 --labels datasets/records/classes.pbtxt --imagePath images/SJ7STAR_images/2018_05_27 \  
 --num-classes 37
+````
+##### predict_video.py
+Test your exported model against a video dataset.
+Outputs an annotated video and a series of still images. The still images are grouped to reduce 
+the output of images with duplicate plates.
+````
+python predict_video.py --conf conf/lplates_smallset.json
 ````

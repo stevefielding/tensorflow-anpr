@@ -1,0 +1,44 @@
+{
+  #######
+  # DATASET SAMPLING CONFIGURATION
+  #######
+  "input_video_path": "video/C920/short/video_original", # input video files. Image files assumed to be in sub-dir, typically labelled with date
+  "output_image_path": "video/C920/short/images", # output images
+  "output_video_path": "video/C920/short/video_processed", # output images
+  "output_cropped_image_path": "video/C920/short/images_from_video_cropped", # output cropped images
+  "save_video_path": "video/C920/short/video_save", # saved video files
+  "log_file_name":"lplateLogSmall.txt", # log file for saving list of plates, frame counts and filename
+
+  #######
+  # Run CONFIGURATION
+  #######
+  "infinite_main_loop": "false", # enable infinite main loop if detect.py is working with continuous live data from the camera
+  "display_video_enable": "false", # enable display of input video
+  "removeOverlay": "false", # remove Sunba overlay text. Overlay can be disabled in Sunba config, so set to false
+  "saveAnnotatedImage": "true", # output files from detect.py can optionally be annotated with LP bounding box and LP chars
+  "imageDebugEnable": "false", # print images from intermediate stages of the image processing pipeline
+  "move_video_file": "false", # move video file to new location after finished processing
+
+  #######
+  # History CONFIGURATION
+  #######
+  "videoFrameRate": 30, # video frame rate in frames per second
+  "plateLogLatency": 1, # Number of seconds between logging operation
+
+  #######
+  # CNN pre-processing
+  #######
+  "plateMargin": 10, # Add an extra margin around the cropped plate image. This allows extra room for image aug during training
+  "searchCropFactorX": 1, # Reduce search area x and y dimensions by this factor. searchCropFactor = 1 = no cropping
+  "searchCropFactorY": 1, # Reduce search area x and y dimensions by this factor. searchCropFactor = 1 = no cropping
+  "frameDecimationFactor": 1, # decimate the frame rate to reduce the processing load
+
+  #######
+  # CNN model CONFIGURATION
+  #######
+  "model":"datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb", # tensorflow Faster RCNN object detector
+  "labels":"datasets/records/classes.pbtxt", # detector class labels
+  "num_classes": 37,
+  "min_confidence": 0.5
+
+}
