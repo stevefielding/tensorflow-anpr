@@ -147,8 +147,8 @@ class PlateFinder:
     if (len(plateBoxes) != len(platesFinal) or len(plateBoxes) != len(charTexts)):
       print("[ERROR]: len(platesBoxes):{} != len(platesFinal):{} or len(platesBoxes):{} != len(charText):{}"
             .format(len(plateBoxes), len(platesFinal), len(plateBoxes), len(charTexts)))
-    if licensePlateFound == False:
-      print("[INFO] No license plate found")
+    #if licensePlateFound == False:
+    #  print("[INFO] No license plate found")
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores
 

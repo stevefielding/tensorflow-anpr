@@ -3,15 +3,14 @@ import copy
 import numpy as np
 import cv2
 import re
-
+from base2designs.plates.plateAnn import PlateAnn
 class PlateHistory:
 
-  def __init__(self, output_image_path, output_ann_path, logFile, saveAnnotatedImage):
+  def __init__(self, output_image_path, logFile, saveAnnotatedImage):
     self.rollingPlateDict = {}
     self.savedPlatesList = []
     self.fileCnt = 1
     self.output_image_path = output_image_path
-    self.output_ann_path = output_ann_path
     self.saveAnnotatedImage = saveAnnotatedImage
     self.logFile = logFile
 
@@ -98,6 +97,9 @@ class PlateHistory:
         charDicts = [{}, {}, {}, {}, {}, {}, {}]
         for plateEntry in plateDictDeDuped[plateText]:
           for (i,char) in enumerate(plateEntry[0]):
+            # check for plates that are too long
+            if i > 6:
+              continue
             if char in charDicts[i].keys():
               charDicts[i][char] += 1
             else:
@@ -139,7 +141,8 @@ class PlateHistory:
 
     return (plateDictBest)
 
-  def logToFile(self, plateDict, destFolderRootName, imageWidth, imageHeight):
+  def logToFile(self, plateDict, destFolderRootName, imageWidth, imageHeight, imageDepth):
+    plateAnn = PlateAnn()
     # for all the plates in plateDict, add to full log if the plate has not been previously seen
     # otherwise add to partial log
     plateDictForFullLog = {}
@@ -156,8 +159,8 @@ class PlateHistory:
       del(self.savedPlatesList[0:len(self.savedPlatesList)-30])
 
     # Full log. Copy fullImage and plate Image to file and update log file
-    for plateText in plateDictForFullLog.keys():
-      (plateText, chBoxes, plateBox, fullImage, videoPath, frameNumber, numberOfPlates) = plateDictForFullLog[plateText]
+    for plateTextKey in plateDictForFullLog.keys():
+      (plateText, chBoxes, plateBox, fullImage, videoPath, frameNumber, numberOfPlates) = plateDictForFullLog[plateTextKey]
 
       # strip the video file name for use when saving still images
       videoFileName = videoPath.split("/")[-1]
@@ -166,6 +169,8 @@ class PlateHistory:
       # create unique file name for the full image file. Append plate text to the file name
       outputFullImageFileName = "{}_{}_{}_cnt{}".format(fileNamePrefix, self.fileCnt, plateText, numberOfPlates)
       outputFullImagePath = "{}/{}/{}.jpg".format(self.output_image_path, destFolderRootName, outputFullImageFileName)
+      outputAnnPath = "{}/{}_ann/{}.xml".format(self.output_image_path, destFolderRootName, outputFullImageFileName)
+      plateAnn.writeAnnFile(outputAnnPath, outputFullImagePath, plateBox, plateText, chBoxes, imageWidth, imageHeight, imageDepth)
       self.fileCnt += 1
 
       # optionally annotate the image
@@ -179,7 +184,7 @@ class PlateHistory:
           cv2.rectangle(fullImage, (startX, startY), (endX, endY), (0, 255, 0), 2)
 
       # print the plate text
-      print("[INFO] Found plate: {}".format(plateText))
+      #print("[INFO] Found plate: {}".format(plateText))
 
       # save the image
       print("[INFO] logging image to file: {}".format(outputFullImagePath))
@@ -199,8 +204,8 @@ class PlateHistory:
       self.logFile.flush()
 
     # Partial log. Just update the log file
-    for plateText in plateDictForPartialLog.keys():
-      (plateText, chBoxes, plateBox, fullImage, videoPath, frameNumber, numberOfPlates) = plateDictForPartialLog[plateText]
+    for plateTextKey in plateDictForPartialLog.keys():
+      (plateText, chBoxes, plateBox, fullImage, videoPath, frameNumber, numberOfPlates) = plateDictForPartialLog[plateTextKey]
 
       # strip the video file name for use when saving still images
       videoFileName = videoPath.split("/")[-1]

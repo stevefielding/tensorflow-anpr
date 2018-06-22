@@ -47,6 +47,10 @@ for oldTuple in COLORS:
   COLORS2.append(newTuple)
 COLORS = COLORS2
 
+# if the video frames are larger than this dimension they
+# will be resized, whilst retaining the same aspect ratio
+MAX_VID_DIM = 2000
+
 model = tf.Graph()
 
 # create a context manager that makes this model the default one for
@@ -80,21 +84,22 @@ else:
 # create a plateFinder and load the plate history utility
 plateFinder = PlateFinder(conf["min_confidence"])
 folderController = FolderControl()
-plateHistory = PlateHistory(conf["output_image_path"], conf["output_cropped_image_path"], logFile,
+plateHistory = PlateHistory(conf["output_image_path"], logFile,
                             saveAnnotatedImage=conf["saveAnnotatedImage"] == "true")
 quit = False
 plateLogLatency = conf["plateLogLatency"]* conf["videoFrameRate"]
 platesReadyForLog = False
 myPaths = paths.list_files(conf["input_video_path"], validExts=(".h264", "mp4", "mov", "ts"))
-totalFrameCount = 0
-validImages = 0
-loggedPlateCount = 0
+
 
 # loop over all the detected video files
 for videoPath in sorted(myPaths):
   print("[INFO] reading video file {}...".format(videoPath))
   start_time = time.time()
   frameCount = 0
+  oldFrameCount = 0
+  validImages = 0
+  loggedPlateCount = 0
   frameCntForPlateLog = 0
   frameDecCnt = 1
   m = re.search(r"([0-9]{4}[-_][0-9]{2}[-_][0-9]{2})", videoPath)
@@ -158,41 +163,32 @@ for videoPath in sorted(myPaths):
         (H, W) = image.shape[:2]
 
         # check to see if we should resize along the width
-        if W > H and W > 1000:
-          image = imutils.resize(image, width=1000)
+        if W > H and W > MAX_VID_DIM:
+          image = imutils.resize(image, width=MAX_VID_DIM)
 
         # otherwise, check to see if we should resize along the
         # height
-        elif H > W and H > 1000:
-          image = imutils.resize(image, height=1000)
+        elif H > W and H > MAX_VID_DIM:
+          image = imutils.resize(image, height=MAX_VID_DIM)
 
         # prepare the image for detection
-        (H, W) = image.shape[:2]
+        (H, W, D) = image.shape[:3]
         stillImage = image.copy()
-        videoImage = image.copy()
-        image = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
-        image = np.expand_dims(image, axis=0)
+
 
         # if the video writer is None, initialize it
         # initialize in the middle of loop, because we don't know W and H until the first video frame is read
-        if videoWriter is None:
-          # save annotated video to "output_video_path". Use the same file prefix, but change the suffix to mp4
-          outputPathVideo = conf["output_video_path"] + "/" + destFolderRootName + videoPath[videoPath.rfind("/") + 0:]
-          outputPathVideo = outputPathVideo[0: outputPathVideo.rfind(".")] + ".mp4"
-          videoWriter = VideoWriter(outputPathVideo, W, H)
+        if conf["saveAnnotatedVideo"] == "true":
+          if videoWriter is None:
+            # save annotated video to "output_video_path". Use the same file prefix, but change the suffix to mp4
+            outputPathVideo = conf["output_video_path"] + "/" + destFolderRootName + videoPath[videoPath.rfind("/") + 0:]
+            outputPathVideo = outputPathVideo[0: outputPathVideo.rfind(".")] + ".mp4"
+            videoWriter = VideoWriter(outputPathVideo, W, H)
+          # create a copy of image
+          videoImage = image.copy()
 
-        # perform inference and compute the bounding boxes,
-        # probabilities, and class labels
-        (boxes, scores, labels, N) = sess.run(
-          [boxesTensor, scoresTensor, classesTensor, numDetections],
-          feed_dict={imageTensor: image})
 
-        # squeeze the lists into a single dimension
-        boxes = np.squeeze(boxes)
-        scores = np.squeeze(scores)
-        labels = np.squeeze(labels)
-
-        # Decimate the the frames
+        # Decimate the frames
         frameCount += 1
         if firstPlateFound == True:
           frameCntForPlateLog += 1
@@ -201,13 +197,29 @@ for videoPath in sorted(myPaths):
           frameCntForPlateLog = 0
         if (frameDecCnt == 1):
           #ret, frame = vs.retrieve()  # retrieve the already grabbed frame
+
+          # Convert image into format expected by tensorflow, ie RGB and extra dimension to represent the batch axis
+          image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+          image = np.expand_dims(image, axis=0)
+
+          # perform inference and compute the bounding boxes,
+          # probabilities, and class labels
+          (boxes, scores, labels, N) = sess.run(
+            [boxesTensor, scoresTensor, classesTensor, numDetections],
+            feed_dict={imageTensor: image})
+
+          # squeeze the lists into a single dimension
+          boxes = np.squeeze(boxes)
+          scores = np.squeeze(scores)
+          labels = np.squeeze(labels)
+
+          # write annotated video if option is selected
+          if conf["saveAnnotatedVideo"] == "true":
+            # write the frame plus annotation to the video stream
+            videoWriter.writeFrame(videoImage, plateBoxes, charTexts, charBoxes, charScores)
+
           # find the plates, and find the chars within the plates
           licensePlateFound, plateBoxes, charTexts, charBoxes, charScores = plateFinder.findPlateText(boxes, scores, labels, categoryIdx)
-          for charText in charTexts:
-            if len(charText) == 0:
-              print("         No plate text")
-            else:
-              print("[INFO] {}".format(charText))
 
           # if license plates have been found, then predict the plate text, and add to the history
           if licensePlateFound == True:
@@ -224,7 +236,7 @@ for videoPath in sorted(myPaths):
             plateLogFlag = False
             plateDictBest = plateHistory.selectTheBestPlates()
             # generate output files, ie cropped Images, full image and log file
-            plateHistory.logToFile(plateDictBest, destFolderRootName, W, H)
+            plateHistory.logToFile(plateDictBest, destFolderRootName, W, H, D)
             plateHistory.removeOldPlatesFromHistory()
             loggedPlateCount += len(plateDictBest)
 
@@ -233,9 +245,19 @@ for videoPath in sorted(myPaths):
         else:
           frameDecCnt += 1
 
-        # write the frame plus annotation to the video stream
-        videoWriter.writeFrame(videoImage, plateBoxes, charTexts, charBoxes, charScores)
 
-      # close the video file pointers
-      videoWriter.closeWriter()
-      stream.release()
+      # close the video writer and release the stream
+      if conf["saveAnnotatedVideo"] == "true":
+        videoWriter.closeWriter()
+        stream.release()
+
+      # print some performance statistics
+      curTime = time.time()
+      processingTime = curTime - start_time
+      frameCountDelta = frameCount - oldFrameCount
+      fps = frameCountDelta / processingTime
+      oldFrameCount = frameCount
+      print(
+        "[INFO] Processed {} frames in {:.2f} seconds. Frame rate: {:.2f} Hz".format(frameCountDelta, processingTime,
+                                                                                     fps))
+      print("[INFO] validImages: {}, frameCount: {}, loggedPlateCount: {}".format(validImages, frameCount, loggedPlateCount))
