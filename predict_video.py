@@ -124,7 +124,9 @@ for videoPath in sorted(myPaths):
       # loop over frames from the video file stream
       while True:
         # grab the next frame
-        (grabbed, image) = stream.read()
+        #(grabbed, image) = stream.read()
+        # read the next frame from the video stream
+        grabbed = stream.grab()  # grab frame but do not decode
 
         # We have reached the end of the video clip. Save any residual plates to log
         # Remove all the plate history
@@ -132,7 +134,7 @@ for videoPath in sorted(myPaths):
           if platesReadyForLog == True:
             plateDictBest = plateHistory.selectTheBestPlates()
             # generate output files, ie cropped Images, full image and log file
-            plateHistory.logToFile(plateDictBest, destFolderRootName)
+            plateHistory.logToFile(plateDictBest, destFolderRootName, W, H, D)
             loggedPlateCount += len(plateDictBest)
           plateHistory.clearHistory()
           firstPlateFound = False
@@ -148,46 +150,6 @@ for videoPath in sorted(myPaths):
               sys.exit(1)
           break
 
-        # grab a reference to the input image tensor and the
-        # boxes
-        imageTensor = model.get_tensor_by_name("image_tensor:0")
-        boxesTensor = model.get_tensor_by_name("detection_boxes:0")
-
-        # for each bounding box we would like to know the score
-        # (i.e., probability) and class label
-        scoresTensor = model.get_tensor_by_name("detection_scores:0")
-        classesTensor = model.get_tensor_by_name("detection_classes:0")
-        numDetections = model.get_tensor_by_name("num_detections:0")
-
-        # grab the image dimensions
-        (H, W) = image.shape[:2]
-
-        # check to see if we should resize along the width
-        if W > H and W > MAX_VID_DIM:
-          image = imutils.resize(image, width=MAX_VID_DIM)
-
-        # otherwise, check to see if we should resize along the
-        # height
-        elif H > W and H > MAX_VID_DIM:
-          image = imutils.resize(image, height=MAX_VID_DIM)
-
-        # prepare the image for detection
-        (H, W, D) = image.shape[:3]
-        stillImage = image.copy()
-
-
-        # if the video writer is None, initialize it
-        # initialize in the middle of loop, because we don't know W and H until the first video frame is read
-        if conf["saveAnnotatedVideo"] == "true":
-          if videoWriter is None:
-            # save annotated video to "output_video_path". Use the same file prefix, but change the suffix to mp4
-            outputPathVideo = conf["output_video_path"] + "/" + destFolderRootName + videoPath[videoPath.rfind("/") + 0:]
-            outputPathVideo = outputPathVideo[0: outputPathVideo.rfind(".")] + ".mp4"
-            videoWriter = VideoWriter(outputPathVideo, W, H)
-          # create a copy of image
-          videoImage = image.copy()
-
-
         # Decimate the frames
         frameCount += 1
         if firstPlateFound == True:
@@ -196,17 +158,56 @@ for videoPath in sorted(myPaths):
           plateLogFlag = True
           frameCntForPlateLog = 0
         if (frameDecCnt == 1):
-          #ret, frame = vs.retrieve()  # retrieve the already grabbed frame
+          grabbed, image = stream.retrieve()  # retrieve the already grabbed frame
+
+          # grab a reference to the input image tensor and the
+          # boxes
+          imageTensor = model.get_tensor_by_name("image_tensor:0")
+          boxesTensor = model.get_tensor_by_name("detection_boxes:0")
+
+          # for each bounding box we would like to know the score
+          # (i.e., probability) and class label
+          scoresTensor = model.get_tensor_by_name("detection_scores:0")
+          classesTensor = model.get_tensor_by_name("detection_classes:0")
+          numDetections = model.get_tensor_by_name("num_detections:0")
+
+          # grab the image dimensions
+          (H, W) = image.shape[:2]
+
+          # check to see if we should resize along the width
+          if W > H and W > MAX_VID_DIM:
+            image = imutils.resize(image, width=MAX_VID_DIM)
+
+          # otherwise, check to see if we should resize along the
+          # height
+          elif H > W and H > MAX_VID_DIM:
+            image = imutils.resize(image, height=MAX_VID_DIM)
+
+          # get the new dimensions for the resized image
+          (H, W, D) = image.shape[:3]
+
+          # if the video writer is None, initialize it
+          # initializing in the middle of the loop, because we don't know
+          # W, H, and D until the first video frame is read
+          if conf["saveAnnotatedVideo"] == "true":
+            if videoWriter is None:
+              # save annotated video to "output_video_path". Use the same file prefix, but change the suffix to mp4
+              outputPathVideo = conf["output_video_path"] + "/" + destFolderRootName + videoPath[
+                                                                                       videoPath.rfind("/") + 0:]
+              outputPathVideo = outputPathVideo[0: outputPathVideo.rfind(".")] + ".mp4"
+              videoWriter = VideoWriter(outputPathVideo, W, H)
+            # create a copy of image
+            videoImage = image.copy()
 
           # Convert image into format expected by tensorflow, ie RGB and extra dimension to represent the batch axis
-          image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-          image = np.expand_dims(image, axis=0)
+          tfImage = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
+          tfImage = np.expand_dims(tfImage, axis=0)
 
           # perform inference and compute the bounding boxes,
           # probabilities, and class labels
           (boxes, scores, labels, N) = sess.run(
             [boxesTensor, scoresTensor, classesTensor, numDetections],
-            feed_dict={imageTensor: image})
+            feed_dict={imageTensor: tfImage})
 
           # squeeze the lists into a single dimension
           boxes = np.squeeze(boxes)
@@ -219,11 +220,11 @@ for videoPath in sorted(myPaths):
             videoWriter.writeFrame(videoImage, plateBoxes, charTexts, charBoxes, charScores)
 
           # find the plates, and find the chars within the plates
-          licensePlateFound, plateBoxes, charTexts, charBoxes, charScores = plateFinder.findPlateText(boxes, scores, labels, categoryIdx)
+          licensePlateFound, plateBoxes, charTexts, charBoxes, charScores = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
 
           # if license plates have been found, then predict the plate text, and add to the history
           if licensePlateFound == True:
-            plateHistory.addPlatesToHistory(charTexts, charBoxes, plateBoxes, stillImage, videoPath, frameCount)
+            plateHistory.addPlatesToHistory(charTexts, charBoxes, plateBoxes, image, videoPath, frameCount)
             validImages += 1
             firstPlateFound = True
             platesReadyForLog = True

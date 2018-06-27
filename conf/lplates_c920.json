@@ -1,0 +1,43 @@
+{
+  #######
+  # DATASET SAMPLING CONFIGURATION
+  #######
+  "input_video_path": "video/C920/long/video_original", # input video files. Image files assumed to be in sub-dir, typically labelled with date
+  "output_image_path": "video/C920/long/images", # output images
+  "output_video_path": "video/C920/long/video_processed", # output images
+  "save_video_path": "video/C920/long/video_save", # saved video files
+  "log_file_name":"lplateLogC920.txt", # log file for saving list of plates, frame counts and filename
+
+  #######
+  # Run CONFIGURATION
+  #######
+  "infinite_main_loop": "false", # enable infinite main loop if detect.py is working with continuous live data from the camera
+  "display_video_enable": "false", # enable display of input video
+  "removeOverlay": "false", # remove Sunba overlay text. Overlay can be disabled in Sunba config, so set to false
+  "saveAnnotatedImage": "false", # output files from detect.py can optionally be annotated with LP bounding box and LP chars
+  "saveAnnotatedVideo": "false", # output an annotated video
+  "imageDebugEnable": "false", # print images from intermediate stages of the image processing pipeline
+  "move_video_file": "true", # move video file to new location after finished processing
+
+  #######
+  # History CONFIGURATION
+  #######
+  "videoFrameRate": 30, # video frame rate in frames per second
+  "plateLogLatency": 1, # Number of seconds between logging operation
+
+  #######
+  # CNN pre-processing
+  #######
+  "searchCropFactorX": 1, # Reduce search area x and y dimensions by this factor. searchCropFactor = 1 = no cropping
+  "searchCropFactorY": 1, # Reduce search area x and y dimensions by this factor. searchCropFactor = 1 = no cropping
+  "frameDecimationFactor": 4, # decimate the frame rate to reduce the processing load
+
+  #######
+  # CNN model CONFIGURATION
+  #######
+  "model":"datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb", # tensorflow Faster RCNN object detector
+  "labels":"datasets/records/classes.pbtxt", # detector class labels
+  "num_classes": 37,
+  "min_confidence": 0.5
+
+}

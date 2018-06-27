@@ -58,8 +58,8 @@ class PlateFinder:
     # return the intersection over area value
     return ioa
 
-  # Generate characters for each plate detected.
-  def findPlateText(self, boxes, scores, labels, categoryIdx):
+  # Find plate boxes and the text associated with each plate
+  def findPlates(self, boxes, scores, labels, categoryIdx):
     licensePlateFound = False
     # set mask to all true
     mask = np.ones(len(scores), dtype=bool)
@@ -152,3 +152,60 @@ class PlateFinder:
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores
 
+  # Find ground truth plate boxes and the text associated with each plate
+  def findGroundTruthPlates(self, boxes, labels):
+    labels = [x.decode("ASCII") for x in labels]
+    labels = np.array(labels)
+    licensePlateFound = False
+    # set mask to all true
+    mask = np.ones(len(labels), dtype=bool)
+
+    # move plate boxes to separate list
+    plateBoxes = []
+    for (i, (box, label)) in enumerate(zip(boxes, labels)):
+      # if label is plate, then append box to plateBoxes list and discard from original lists
+      if label == "plate":
+        mask[i] = False
+        plateBoxes.append(box)
+
+    # update the lists to remove plate boxes
+    boxes = boxes[mask,...]
+    labels = labels[mask,...]
+
+    # For each plate box, discard char boxes that are less than 0.5 ioa with plateBox.
+    # re-order the remaining boxes by startX
+    plates = []
+    for plateBox in plateBoxes:
+      chars = []
+      for (charBox, label) in zip(boxes, labels):
+        ioa = self.intersectionOverArea(charBox, plateBox)
+        if ioa > 0.5:
+          char = [charBox[1], charBox, label]
+          chars.append(char)
+      chars = sorted(chars, key=lambda x: x[0])
+      if len(chars) > 0:
+        plates.append(chars)
+      else:
+        plates.append([])
+
+
+    # Extract the plate text and append to list
+    charTexts = []
+    charBoxes = []
+    for plate in plates:
+      if len(plate) != 0:
+        licensePlateFound = True
+        plateArray = np.array(plate, object)
+        chars = plateArray[:,2]
+        chars = ''.join(chars)
+        charTexts.append(chars)
+        charBoxes.append(plateArray[:,1])
+      else:
+        charTexts.append([])
+        charBoxes.append([])
+
+    if (len(plateBoxes) != len(plates) or len(plateBoxes) != len(charTexts)):
+      print("[ERROR]: len(platesBoxes):{} != len(plates):{} or len(platesBoxes):{} != len(charText):{}"
+            .format(len(plateBoxes), len(plates), len(plateBoxes), len(charTexts)))
+
+    return licensePlateFound, plateBoxes, charTexts, charBoxes
