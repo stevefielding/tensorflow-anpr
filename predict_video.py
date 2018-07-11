@@ -134,7 +134,7 @@ for videoPath in sorted(myPaths):
           if platesReadyForLog == True:
             plateDictBest = plateHistory.selectTheBestPlates()
             # generate output files, ie cropped Images, full image and log file
-            plateHistory.logToFile(plateDictBest, destFolderRootName, W, H, D)
+            plateHistory.writeToFile(plateDictBest, destFolderRootName, W, H, D)
             loggedPlateCount += len(plateDictBest)
           plateHistory.clearHistory()
           firstPlateFound = False
@@ -237,7 +237,7 @@ for videoPath in sorted(myPaths):
             plateLogFlag = False
             plateDictBest = plateHistory.selectTheBestPlates()
             # generate output files, ie cropped Images, full image and log file
-            plateHistory.logToFile(plateDictBest, destFolderRootName, W, H, D)
+            plateHistory.writeToFile(plateDictBest, destFolderRootName, W, H, D)
             plateHistory.removeOldPlatesFromHistory()
             loggedPlateCount += len(plateDictBest)
 

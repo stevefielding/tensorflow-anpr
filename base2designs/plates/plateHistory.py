@@ -141,7 +141,8 @@ class PlateHistory:
 
     return (plateDictBest)
 
-  def logToFile(self, plateDict, destFolderRootName, imageWidth, imageHeight, imageDepth):
+  # write image file, annotation file, and log file
+  def writeToFile(self, plateDict, destFolderRootName, imageWidth, imageHeight, imageDepth):
     plateAnn = PlateAnn()
     # for all the plates in plateDict, add to full log if the plate has not been previously seen
     # otherwise add to partial log

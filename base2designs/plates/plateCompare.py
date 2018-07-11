@@ -11,6 +11,16 @@ class PlateCompare():
     self.cum_charCnt_pred = 0
 
   # generate some stats for the images analysed
+  # platesWithCharCorrect - Plates detected in correct location and containing correct characters in the correct locations
+  # platesCorrect - Plates in correct location, but no checking of characters
+  # platesIncorrect - Plates detected outside of correct location. Calculated as a percentage, but bear in mind that
+  #                   the plates outside the correct location is unbounded, so plateCorrect+platesIncorrect may not add
+  #                   up to 100%
+  # charsCorrect - Characters detected in the correct place with the correct contents
+  # charsIncorrect - Chars detected outside of the correct location, or the location is correct,
+  #                  but the contents are wrong. Calculated as a percentage, but bear in mind that
+  #                  the number of characters outside the correct location is unbounded, so charsCorrect+charsIncorrect
+  #                  may not add up to 100%
   def calcStats(self):
     platesWithCharCorrect = self.cum_plateWithCharMatchCnt / self.cum_plateCnt_gt
     platesCorrect = self.cum_plateFrameMatchCnt / self.cum_plateCnt_gt

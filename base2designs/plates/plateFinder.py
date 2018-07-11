@@ -3,8 +3,9 @@ import numpy as np
 
 class PlateFinder:
 
-  def __init__(self, minConfidence):
+  def __init__(self, minConfidence, charIOUMax=0.3):
     self.minConfidence = minConfidence
+    self.charIOUMax = charIOUMax
 
   # calculate the intersection over union of two boxes
   def intersectionOverUnion(self, box1, box2):
@@ -119,7 +120,7 @@ class PlateFinder:
           else:
             iou = self.intersectionOverUnion(plateChar[1], prevChar[1])
             #print(iou)
-            if iou < 0.3:
+            if iou < self.charIOUMax:
               charsNoOverlap.append(plateChar)
               prevChar = plateChar
       #else:

@@ -99,7 +99,7 @@ with model.as_default():
       boxes = np.squeeze(boxes)
       scores = np.squeeze(scores)
       labels = np.squeeze(labels)
-      plates = plateFinder.findPlateText(boxes, scores, labels, categoryIdx)
+      plates = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
       for plate in plates:
         print(plate)
 

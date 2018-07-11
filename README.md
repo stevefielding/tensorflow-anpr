@@ -26,6 +26,18 @@ One xml file for each image.
 Once the annotations are in Pascal VOC style xml, you can use [labelImg](https://tzutalin.github.io/labelImg/) to fix any mistakes in the labelled images.  
 Make sure that you take one pass through your dataset, and click on verify image.
 
+##### gen_plates.py
+Create an articial set of images containing random plates, along with corresponding PASCAL VOC xml annotation files.
+You will need the [SUN database](vision.princeton.edu/projects/2010/SUN/SUN397.tar.gz). See  in order to generate the background images.
+[Mat Earl ANPR](https://github.com/matthewearl/deep-anpr).  
+After generating the images, I manually edited the images, using Gimp, to remove text in the background. Not sure that this is a good idea, but the rationale was that I did not
+want to train the network to learn that the text in the background was not license plate text.
+I feel that this makes the classification process harder to train, as it has to be more discriminative.
+And if background text is detected during inference, this is usually OK, because it will be discarded 
+if it is not within a plate bounding box.
+````
+python gen_plates.py --numImages 1000 --imagePath artificial_images/CA --xmlPath artificial_images/CA_ann
+````
 ##### build_anpr_records.py:
 Reads a group of PASCAL VOC style xml annotation files, and combines with associated images 
 to build a TFrecord dataset. Requires a predefined label map file that maps labels to integers.  
@@ -98,6 +110,7 @@ If you are running the eval on CPU, then limit the number of images to evaluate 
 ````
 New terminal 
 ```` 
+cd tensorflow/models/research/object_detection
 workon tensoflow  
 export CUDA_VISIBLE_DEVICES=""  
 python eval.py --logtostderr \  
@@ -142,11 +155,11 @@ python predict_video.py --conf conf/lplates_smallset.json
 Test a trained model against an annotated dataset. Annotations must be in PASCAL VOC style xml files
 Run with image_display true if you wish to see each annotated image displayed.
 ````
-python predict.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
+python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
 --labels datasets/records/classes.pbtxt --annotations_dir images/C920_images/2018_06_14_ann --num-classes 37 \
 --image_display false
 ````
-Your resulst should look something like this:
+Your results should look something like this:
 ````
 [INFO] platesWithCharCorrect: 91%, platesCorrect: 99%, platesIncorrect: 0%, charsCorrect: 98%, charsIncorrect: 1%
 [INFO] Processed 723 xml annotation files

@@ -2,6 +2,23 @@
 # python predict.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
 # --labels datasets/records/classes.pbtxt --annotations_dir images/C920_images/2018_06_14_ann --num-classes 37 \
 # --image_display False
+# Scans the annotations_dir and looks for PASCAL_VOC annotations with verified=yes, reads all the associated image
+# files, and performs inference. Predicted results are filtered by plateFinder, which discards char boxes that are
+# outside a platebox, discards char boxes that overlap each other, and then orders the chars within each plate box
+# from left to right.
+# Predicted labels and bounding boxes are compared to the ground truths, and the
+# labelled image is optionally displayed.
+# Scores are displayed for plates and chars.
+# platesWithCharCorrect - Plates detected in correct location and containing correct characters in the correct locations
+# platesCorrect - Plates in correct location, but no checking of characters
+# platesIncorrect - Plates detected outside of correct location. Calculated as a percentage, but bear in mind that
+#                   the plates outside the correct location is unbounded, so plateCorrect+platesIncorrect may not add
+#                   up to 100%
+# charsCorrect - Characters detected in the correct place with the correct contents
+# charsIncorrect - Chars detected outside of the correct location, or the location is correct,
+#                  but the contents are wrong. Calculated as a percentage, but bear in mind that
+#                  the number of characters outside the correct location is unbounded, so charsCorrect+charsIncorrect
+#                  may not add up to 100%
 
 # import the necessary packages
 import argparse
@@ -76,7 +93,7 @@ with model.as_default():
 
     # get the list of verified xml files
     xmlFileCnt, xmlFiles = plateXmlExtract.getXmlVerifiedFileList(args["annotations_dir"])
-    print("[INFO] Found {} xml annotation files".format(xmlFileCnt))
+    print("[INFO] Processing {} xml annotation files ...".format(xmlFileCnt))
     # loop over the xml files
     for xmlFile in xmlFiles:
 
@@ -136,13 +153,19 @@ with model.as_default():
       plateWithCharMatchCnt, plateFrameMatchCnt, plateCntTotal_gt, plateCntTotal_pred, charMatchCntTotal, charCntTotal_gt, charCntTotal_pred = \
           plateCompare.comparePlates(plateBoxes_gt, charBoxes_gt, charTexts_gt, plateBoxes_pred, charBoxes_pred, charTexts_pred)
 
-      # get some stats and print
-      platesWithCharCorrect, platesCorrect, platesIncorrect, charsCorrect, charsIncorrect = plateCompare.calcStats()
-      print ("[INFO] platesWithCharCorrect: {:.0f}%, platesCorrect: {:.0f}%, platesIncorrect: {:.0f}%, charsCorrect: {:.0f}%, charsIncorrect: {:.0f}%" \
-             .format(platesWithCharCorrect*100, platesCorrect*100, platesIncorrect*100, charsCorrect*100, charsIncorrect*100))
+      # warn if no 100% correct plates found
+      if plateWithCharMatchCnt == 0:
+        print("[INFO] No perfect match plates found in \"{}\". plateFrameMatchCnt: {}, charMatchCntTotal: {}".format(xmlFile, plateFrameMatchCnt, charMatchCntTotal))
+        for charText_pred in charTexts_pred:
+          print("     Found: {}".format(charText_pred))
 
       if args["image_display"] == "true":
         # wait for key, so that image windows are displayed
         cv2.waitKey(0)
+
+# get some stats and print
+platesWithCharCorrect, platesCorrect, platesIncorrect, charsCorrect, charsIncorrect = plateCompare.calcStats()
+print("[INFO] platesWithCharCorrect: {:.1f}%, platesCorrect: {:.1f}%, platesIncorrect: {:.1f}%, charsCorrect: {:.1f}%, charsIncorrect: {:.1f}%" \
+       .format(platesWithCharCorrect * 100, platesCorrect * 100, platesIncorrect * 100, charsCorrect * 100, charsIncorrect * 100))
 
 print("[INFO] Processed {} xml annotation files".format(xmlFileCnt))
