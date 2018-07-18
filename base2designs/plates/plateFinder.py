@@ -3,9 +3,18 @@ import numpy as np
 
 class PlateFinder:
 
-  def __init__(self, minConfidence, charIOUMax=0.3):
+  def __init__(self, minConfidence, charIOUMax=0.3, charPlateIOAMin=0.5, rejectPlates=False, minScore=0.6, minChars=2):
+    # boxes below minConfidence are rejected
     self.minConfidence = minConfidence
+    # character boxes that do not overlap plate box by at least 'charPlateIOAMin' are rejected
+    self.charPlateIOAMin = charPlateIOAMin
+    # character boxes overlapping other char boxes by more than 'charIOUMax' are rejected
     self.charIOUMax = charIOUMax
+    # If 'rejectPlates' is True, then plates with a "complete score" less than minScore,
+    # or less than 'minChars' characters, or plate boxes that touch the edge of the frame, will be rejected
+    self.rejectPlates = rejectPlates
+    self.minScore = minScore
+    self.minChars = minChars
 
   # calculate the intersection over union of two boxes
   def intersectionOverUnion(self, box1, box2):
@@ -67,6 +76,7 @@ class PlateFinder:
 
     # Start by discarding all boxes below min score, and moving plate boxes to separate list
     plateBoxes = []
+    plateScores = []
     for (i, (box, score, label)) in enumerate(zip(boxes, scores, labels)):
       if score < self.minConfidence:
         mask[i] = False
@@ -77,6 +87,7 @@ class PlateFinder:
       if label == "plate":
         mask[i] = False
         plateBoxes.append(box)
+        plateScores.append(score)
 
     # update the lists to remove discarded boxes
     boxes = boxes[mask,...]
@@ -88,6 +99,10 @@ class PlateFinder:
     plates = []
     for plateBox in plateBoxes:
       chars = []
+      # loop over the lists: boxes, scores and labels
+      # and discard chars that have low ioa with plateBox
+      # The boxes scores and labels associated with plates have already been removed
+      # so the lists only reference characters
       for (charBox, score, label) in zip(boxes, scores, labels):
         ioa = self.intersectionOverArea(charBox, plateBox)
         if ioa > 0.5:
@@ -95,16 +110,15 @@ class PlateFinder:
           label = "{}".format(label["name"])
           char = [charBox[1], charBox, label, score]
           chars.append(char)
-      #chars = np.array(sorted(chars, key=lambda x: x[0]))
+      # sort the remaining chars by horizontal location
       chars = sorted(chars, key=lambda x: x[0])
-      #chars = chars[:,0]
-      #chars = ''.join(chars)
       if len(chars) > 0:
         plates.append(chars)
       else:
         plates.append(None)
 
-    # Working from left to right, discard any charBox that has an iou > 0.5 with the box immediatley to the left
+    # Working from left to right, discard any charBox that has an iou > 'charIOUMax'
+    # with the box immediately to the left.
     # Loop over the chars, adding chars to charsNoOverLap, if there is no overlap
     platesFinal = []
     for plate in plates:
@@ -127,7 +141,9 @@ class PlateFinder:
       #  print("Empty plate detected")
       platesFinal.append(charsNoOverlap)
 
-    # Extract the plate text and append to list
+    # Extract the character text, boxes and scores and append to lists
+    # Final result is 3 lists containing char text, char boxes and char scores
+    # These lists should be the same size as the plateBoxes list
     charTexts = []
     charBoxes = []
     charScores = []
@@ -140,18 +156,41 @@ class PlateFinder:
         charTexts.append(chars)
         charBoxes.append(plateArray[:,1])
         charScores.append(plateArray[:,3])
+      # else there are no characters in this plate, so append empty lists at this location
       else:
         charTexts.append([])
         charBoxes.append([])
         charScores.append([])
 
-    if (len(plateBoxes) != len(platesFinal) or len(plateBoxes) != len(charTexts)):
-      print("[ERROR]: len(platesBoxes):{} != len(platesFinal):{} or len(platesBoxes):{} != len(charText):{}"
-            .format(len(plateBoxes), len(platesFinal), len(plateBoxes), len(charTexts)))
-    #if licensePlateFound == False:
-    #  print("[INFO] No license plate found")
+    # generate mask to reject plates with; low number of chars, plates on the edge of the frame
+    # and plates with a low average score.
+    mask = np.ones(len(scores), dtype=bool)
+    plateCompleteScores = []
+    mask = np.ones(len(plateScores), dtype=bool)
+    for (i, (plateBox, plateScore, chScores)) in enumerate(zip(plateBoxes, plateScores, charScores)):
+      # Calc the average score for plate plus characters inside the plate, and save to plateCompleteScores
+      averageScore = (plateScore + sum(chScores)) / (len(chScores) + 1)
+      plateCompleteScores.append(averageScore)
+      # set mask to reject bad plates
+      if averageScore < self.minScore or len(chScores) <= self.minChars or max(plateBox) >= 0.998 or min(plateBox) <= 0.002:
+        mask[i] = False
 
-    return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores
+    # optionally remove bad plates
+    if self.rejectPlates == True:
+      # update the lists to remove discarded plates
+      plateCompleteScores = list(np.array(plateCompleteScores)[mask,...])
+      plateBoxes = list(np.array(plateBoxes)[mask,...])
+      charScores = list(np.array(charScores)[mask,...])
+      charTexts = list(np.array(charTexts,object)[mask,...])
+      charBoxes = list(np.array(charBoxes)[mask,...])
+
+    if (len(plateBoxes) != len(plateCompleteScores) or len(plateBoxes) != len(charTexts)):
+      print("[ERROR]: len(platesBoxes):{} != len(platesFinal):{} or len(platesBoxes):{} != len(charText):{}"
+            .format(len(plateBoxes), len(plateCompleteScores), len(plateBoxes), len(charTexts)))
+    if licensePlateFound == True and len(plateCompleteScores) == 0:
+      print("[INFO] license plate found but now rejected")
+
+    return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores
 
   # Find ground truth plate boxes and the text associated with each plate
   def findGroundTruthPlates(self, boxes, labels):
@@ -173,14 +212,14 @@ class PlateFinder:
     boxes = boxes[mask,...]
     labels = labels[mask,...]
 
-    # For each plate box, discard char boxes that are less than 0.5 ioa with plateBox.
+    # For each plate box, discard char boxes that are less than 'charPlateIOAMin' ioa with plateBox.
     # re-order the remaining boxes by startX
     plates = []
     for plateBox in plateBoxes:
       chars = []
       for (charBox, label) in zip(boxes, labels):
         ioa = self.intersectionOverArea(charBox, plateBox)
-        if ioa > 0.5:
+        if ioa > self.charPlateIOAMin:
           char = [charBox[1], charBox, label]
           chars.append(char)
       chars = sorted(chars, key=lambda x: x[0])

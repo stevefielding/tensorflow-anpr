@@ -3,10 +3,11 @@ Enable view_mode if you wish to check your annotations
 If view mode is enabled, then the record file will not be written
 
 Example usage:
-  python build_anpr_records.py \
-  --image_dir=images --record_dir=datasets/records --annotations_dir=images \
-  --label_map_file=datasets/records/classes.pbtxt \
-  --view_mode=False
+    python build_anpr_records.py \
+  --image_dir=images --record_dir=datasets/records \
+  --annotations_dir=images --label_map_file=datasets/records/classes.pbtxt \
+  --view_mode=False --image_scale_factor=0.5 --test_record_file=testing_scaled.record \
+  --train_record_file=training_scaled.record
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -16,6 +17,8 @@ import hashlib
 import io
 import logging
 import os
+import tempfile
+import imutils
 
 from lxml import etree
 import PIL.Image
@@ -32,11 +35,14 @@ flags.DEFINE_string('image_dir', '', 'Root directory to images.')
 flags.DEFINE_string('annotations_dir', 'Annotations',
                     '(Relative) path to annotations directory.')
 flags.DEFINE_string('record_dir', '', 'Path to output TFRecord')
+flags.DEFINE_string('test_record_file', 'testing.record', 'Testing record filename')
+flags.DEFINE_string('train_record_file', 'training.record', 'Training record filename')
 flags.DEFINE_string('label_map_file', '',
                     'label map proto file')
 flags.DEFINE_boolean('ignore_difficult_instances', False, 'Whether to ignore '
                      'difficult instances')
 flags.DEFINE_boolean('view_mode', False, 'View mode enable')
+flags.DEFINE_float('image_scale_factor',1.0,'image scale factor')
 
 FLAGS = flags.FLAGS
 
@@ -84,7 +90,7 @@ def create_train_test_split(annotations_dir):
 
 def dict_to_tf_example(data,
                        dataset_directory,
-                       label_map_dict, xmlFilePath,
+                       label_map_dict, xmlFilePath, imageScaleFactor,
                        ignore_difficult_instances=False,
                        view_mode=False):
   """Convert XML derived dict to tf.Example proto.
@@ -106,6 +112,11 @@ def dict_to_tf_example(data,
   Raises:
     ValueError: if the image pointed to by data['filename'] is not a valid JPEG
   """
+  # create temporary file for storing scaled image
+  imageTempFile = tempfile.NamedTemporaryFile(suffix='.jpg')
+  imageTempFileName = imageTempFile.name
+
+
   # data['folder'] should be the name of a sub-directory of datset_directory
   # If you inspect an xml annotation file, 'folder' specifies a single folder containing the
   # corresponding image. 'path' specifies a full absolute path
@@ -113,12 +124,18 @@ def dict_to_tf_example(data,
   filePathRoot = filePathRoot [:-2]
   filePathRoot = (os.sep).join(filePathRoot)
   filePathRoot = os.path.join(filePathRoot, data['folder'])
-  #img_path = os.path.join(data['folder'], data['filename'])
-  #full_path = os.path.join(dataset_directory, img_path)
   full_path = os.path.join(filePathRoot, data['filename'])
+
+  # Load as opencv image, resize and write to temporary file
+  imageFull = cv2.imread(full_path)
+  width = imageFull.shape[1]
+  imageResized = imutils.resize(imageFull, width=int(width * imageScaleFactor))
+  cv2.imwrite(imageTempFileName, imageResized)
+
+
   if view_mode == True:
-    cvImage = cv2.imread(full_path)
-  with tf.gfile.GFile(full_path, 'rb') as fid:
+    cvImage = cv2.imread(imageTempFileName)
+  with tf.gfile.GFile(imageTempFileName, 'rb') as fid:
     encoded_jpg = fid.read()
   encoded_jpg_io = io.BytesIO(encoded_jpg)
   image = PIL.Image.open(encoded_jpg_io)
@@ -126,8 +143,11 @@ def dict_to_tf_example(data,
     raise ValueError('Image format not JPEG')
   key = hashlib.sha256(encoded_jpg).hexdigest()
 
-  width = int(data['size']['width'])
-  height = int(data['size']['height'])
+  # get the image dims and scale by imageScaleFactor
+  width_original = int(data['size']['width'])
+  height_original = int(data['size']['height'])
+  width_scaled = int(width_original * imageScaleFactor)
+  height_scaled = int(height_original * imageScaleFactor)
 
   xmin = []
   ymin = []
@@ -144,11 +164,10 @@ def dict_to_tf_example(data,
       continue
 
     difficult_obj.append(int(difficult))
-
-    xmin.append(float(obj['bndbox']['xmin']) / width)
-    ymin.append(float(obj['bndbox']['ymin']) / height)
-    xmax.append(float(obj['bndbox']['xmax']) / width)
-    ymax.append(float(obj['bndbox']['ymax']) / height)
+    xmin.append(float(obj['bndbox']['xmin']) / width_original)
+    ymin.append(float(obj['bndbox']['ymin']) / height_original)
+    xmax.append(float(obj['bndbox']['xmax']) / width_original)
+    ymax.append(float(obj['bndbox']['ymax']) / height_original)
     classes_text.append(obj['name'].encode('utf8'))
     classes.append(label_map_dict[obj['name']])
     truncated.append(int(obj['truncated']))
@@ -156,10 +175,10 @@ def dict_to_tf_example(data,
 
     if view_mode == True:
       # denormalize the bounding box coordinates, and add bbox rect to image
-      startX = int(xmin[-1] * width)
-      startY = int(ymin[-1] * height)
-      endX = int(xmax[-1] * width)
-      endY = int(ymax[-1] * height)
+      startX = int(xmin[-1] * width_scaled)
+      startY = int(ymin[-1] * height_scaled)
+      endX = int(xmax[-1] * width_scaled)
+      endY = int(ymax[-1] * height_scaled)
       # if plate box then display the bbox in red
       if classes[-1] == 1:
         color = (0,0,255)
@@ -180,8 +199,8 @@ def dict_to_tf_example(data,
     cv2.waitKey(0)
 
   example = tf.train.Example(features=tf.train.Features(feature={
-      'image/height': dataset_util.int64_feature(height),
-      'image/width': dataset_util.int64_feature(width),
+      'image/height': dataset_util.int64_feature(height_scaled),
+      'image/width': dataset_util.int64_feature(width_scaled),
       'image/filename': dataset_util.bytes_feature(
           data['filename'].encode('utf8')),
       'image/source_id': dataset_util.bytes_feature(
@@ -201,7 +220,8 @@ def dict_to_tf_example(data,
   }))
   return example
 
-def create_record(imageList, image_dir, label_map_file, recordFilePath, view_mode=False, ignore_difficult_instances=False):
+def create_record(imageList, image_dir, label_map_file, recordFilePath, imageScaleFactor, view_mode=False,
+                  ignore_difficult_instances=False):
   # for every xml file, read the annotation and the image file, and add to the record file
 
   if view_mode == False:
@@ -217,7 +237,7 @@ def create_record(imageList, image_dir, label_map_file, recordFilePath, view_mod
       xml_str = fid.read()
     xml = etree.fromstring(xml_str)
     data = dataset_util.recursive_parse_xml_to_dict(xml)['annotation']
-    tf_example = dict_to_tf_example(data, image_dir, label_map_dict, example,
+    tf_example = dict_to_tf_example(data, image_dir, label_map_dict, example, imageScaleFactor,
                                     ignore_difficult_instances, view_mode=view_mode)
     if view_mode == False:
       writer.write(tf_example.SerializeToString())
@@ -232,6 +252,7 @@ def main(_):
   annotations_dir = FLAGS.annotations_dir
   label_map_file = FLAGS.label_map_file
   view_mode = FLAGS.view_mode
+  imageScaleFactor = FLAGS.image_scale_factor
 
   # split the dataset into training data and testing data
   # Note that we are splitting the xml annotation files
@@ -242,17 +263,17 @@ def main(_):
   print("[INFO] Splitting into {} training images, and {} testing images".format(len(trainList), len(testList)))
 
   # create the training record
-  trainingFilePath = os.path.join(FLAGS.record_dir , "training.record")
+  trainingFilePath = os.path.join(FLAGS.record_dir , FLAGS.train_record_file)
   print("[INFO] Writing \"{}\", containing {} images".format(trainingFilePath, len(trainList)))
   create_record(trainList, image_dir, label_map_file,
-                trainingFilePath, view_mode=view_mode,
+                trainingFilePath, imageScaleFactor, view_mode=view_mode,
                 ignore_difficult_instances=FLAGS.ignore_difficult_instances)
 
   # create the testing record
-  testingFilePath = os.path.join(FLAGS.record_dir , "testing.record")
+  testingFilePath = os.path.join(FLAGS.record_dir , FLAGS.test_record_file)
   print("[INFO] Writing \"{}\", containing {} images".format(testingFilePath, len(testList)))
   create_record(testList, image_dir, label_map_file,
-                testingFilePath, view_mode=view_mode,
+                testingFilePath, imageScaleFactor, view_mode=view_mode,
                 ignore_difficult_instances=FLAGS.ignore_difficult_instances)
 
 if __name__ == '__main__':

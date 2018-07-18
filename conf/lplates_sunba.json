@@ -23,7 +23,7 @@
   # History CONFIGURATION
   #######
   "videoFrameRate": 30, # video frame rate in frames per second
-  "plateLogLatency": 1, # Number of seconds between logging operation
+  "plateLogLatency": 10, # Number of seconds between logging operation
 
   #######
   # CNN pre-processing
@@ -35,9 +35,10 @@
   #######
   # CNN model CONFIGURATION
   #######
-  "model":"datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb", # tensorflow Faster RCNN object detector
+  "model":"datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb", # tensorflow Faster RCNN object detector
   "labels":"datasets/records/classes.pbtxt", # detector class labels
   "num_classes": 37,
+  "charIOUMax": 0.3,
   "min_confidence": 0.5
 
 }

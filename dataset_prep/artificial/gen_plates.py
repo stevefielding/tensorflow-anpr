@@ -39,7 +39,6 @@ import itertools
 import math
 import os
 import random
-import sys
 import argparse
 import cv2
 import numpy
@@ -101,12 +100,12 @@ def euler_to_mat(yaw, pitch, roll):
     return M
 
 
-def pick_colors():
+def pick_colors(enable_rand_polarity_bg=True):
     first = True
-    while first or plate_color - text_color < 0.3:
+    while first or abs(plate_color - text_color) < 0.3:
         text_color = random.random()
         plate_color = random.random()
-        if text_color > plate_color:
+        if (enable_rand_polarity_bg == False and text_color > plate_color):
             text_color, plate_color = plate_color, text_color
         first = False
     return text_color, plate_color
@@ -196,7 +195,7 @@ def rounded_rect(shape, radius):
     return out
 
 
-def generate_plate(font_height, char_ims):
+def generate_plate(font_height, char_ims, enable_rand_polarity_bg):
     h_padding = random.uniform(0.05, 0.11) * font_height
     v_padBot = random.uniform(0.15, 0.25) * font_height
     #v_padTop = random.uniform(0.6, 0.7) * font_height
@@ -213,7 +212,7 @@ def generate_plate(font_height, char_ims):
     out_shape = (int(font_height + v_padBot + v_padTop),
                  int(text_width + h_padding * 2))
 
-    text_color, plate_color = pick_colors()
+    text_color, plate_color = pick_colors(enable_rand_polarity_bg)
 
     # init the plate image
     text_mask = numpy.zeros(out_shape)
@@ -272,10 +271,10 @@ def transBox(box, transMat):
   boxOut = numpy.array([numpy.min(boxPolygon, axis=0), numpy.max(boxPolygon, axis=0)])
   return boxOut
 
-def generate_im(char_ims, num_bg_images, enable_image_ann):
+def generate_im(char_ims, num_bg_images, enable_image_ann, enable_rand_polarity_bg):
     # Generate background image and plate image
     bg = generate_bg(num_bg_images)
-    plate, plate_mask, code, charShapes = generate_plate(FONT_HEIGHT, char_ims)
+    plate, plate_mask, code, charShapes = generate_plate(FONT_HEIGHT, char_ims, enable_rand_polarity_bg)
     # get the plate shape
     plateOriginalShape = numpy.shape(plate)
     # Add the origin
@@ -330,7 +329,7 @@ def load_fonts(folder_path):
     return fonts, font_char_ims
 
 
-def generate_ims(enable_image_ann):
+def generate_ims(enable_image_ann, enable_rand_polarity_bg):
   """
   Generate number plate images.
   :return:
@@ -340,7 +339,7 @@ def generate_ims(enable_image_ann):
   fonts, font_char_ims = load_fonts(FONT_DIR)
   num_bg_images = len(os.listdir("bgs"))
   while True:
-      yield generate_im(font_char_ims[random.choice(fonts)], num_bg_images, enable_image_ann)
+      yield generate_im(font_char_ims[random.choice(fonts)], num_bg_images, enable_image_ann, enable_rand_polarity_bg)
 
 
 
@@ -355,6 +354,8 @@ if __name__ == "__main__":
                   help="number of image files to generate")
   ap.add_argument("-d", "--debug", default="false",
                   help="enable debug by adding annotation to output images")
+  ap.add_argument("-b", "--enable_rand_polarity_bg", default="false",
+                  help="enable white on black AND black on white plates")
   args = vars(ap.parse_args())
 
   if args["debug"] == "true":
@@ -362,10 +363,15 @@ if __name__ == "__main__":
   else:
     enable_image_ann = False
 
+  if args["enable_rand_polarity_bg"] == "true":
+    enable_rand_polarity_bg = True
+  else:
+    enable_rand_polarity_bg = False
+    
   os.mkdir(args["imagePath"])
   os.mkdir(args["xmlPath"])
   pascalVocXml = PascalVocXml()
-  im_gen = itertools.islice(generate_ims(enable_image_ann), int(args["numImages"]))
+  im_gen = itertools.islice(generate_ims(enable_image_ann, enable_rand_polarity_bg), int(args["numImages"]))
   for img_idx, (im, c, p, plate_box, char_boxes) in enumerate(im_gen):
     fname = "{}/{:08d}_{}_{}.jpg".format(args["imagePath"],img_idx, c,
                                            "1" if p else "0")

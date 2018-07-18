@@ -82,7 +82,7 @@ else:
   logFile = open(logFilePath, "a")
 
 # create a plateFinder and load the plate history utility
-plateFinder = PlateFinder(conf["min_confidence"])
+plateFinder = PlateFinder(conf["min_confidence"], rejectPlates=True, charIOUMax=conf["charIOUMax"])
 folderController = FolderControl()
 plateHistory = PlateHistory(conf["output_image_path"], logFile,
                             saveAnnotatedImage=conf["saveAnnotatedImage"] == "true")
@@ -220,11 +220,11 @@ for videoPath in sorted(myPaths):
             videoWriter.writeFrame(videoImage, plateBoxes, charTexts, charBoxes, charScores)
 
           # find the plates, and find the chars within the plates
-          licensePlateFound, plateBoxes, charTexts, charBoxes, charScores = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
+          licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateScores = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
 
           # if license plates have been found, then predict the plate text, and add to the history
           if licensePlateFound == True:
-            plateHistory.addPlatesToHistory(charTexts, charBoxes, plateBoxes, image, videoPath, frameCount)
+            plateHistory.addPlatesToHistory(charTexts, charBoxes, plateBoxes, image, videoPath, frameCount, plateScores)
             validImages += 1
             firstPlateFound = True
             platesReadyForLog = True

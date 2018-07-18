@@ -72,7 +72,7 @@ categories = label_map_util.convert_label_map_to_categories(
 categoryIdx = label_map_util.create_category_index(categories)
 
 # create a plateFinder
-plateFinder = PlateFinder(args["min_confidence"])
+plateFinder = PlateFinder(args["min_confidence"], rejectPlates=True)
 
 # create a plate xml extractor
 plateXmlExtract = PlateXmlExtract(args["labels"])
@@ -144,7 +144,7 @@ with model.as_default():
       labels = np.squeeze(labels)
 
       # find the plate text associated with each plate, and display
-      licensePlateFound_pred, plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
+      licensePlateFound_pred, plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateScores_pred = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
       if args["image_display"] == "true":
         imageLabelled = plateDisplay.labelImage(imagePreds, plateBoxes_pred, charBoxes_pred, charTexts_pred)
         cv2.imshow("Predicted plates", imageLabelled)
