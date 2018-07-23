@@ -68,55 +68,9 @@ class PlateFinder:
     # return the intersection over area value
     return ioa
 
-  # Find plate boxes and the text associated with each plate
-  def findPlates(self, boxes, scores, labels, categoryIdx):
-    licensePlateFound = False
-    # set mask to all true
-    mask = np.ones(len(scores), dtype=bool)
-
-    # Start by discarding all boxes below min score, and moving plate boxes to separate list
-    plateBoxes = []
-    plateScores = []
-    for (i, (box, score, label)) in enumerate(zip(boxes, scores, labels)):
-      if score < self.minConfidence:
-        mask[i] = False
-        continue
-      label = categoryIdx[label]
-      label = "{}".format(label["name"])
-      # if label is plate, then append box to plateBoxes list and discard from original lists
-      if label == "plate":
-        mask[i] = False
-        plateBoxes.append(box)
-        plateScores.append(score)
-
-    # update the lists to remove discarded boxes
-    boxes = boxes[mask,...]
-    scores = scores[mask,...]
-    labels = labels[mask,...]
-
-    # For each plate box, discard char boxes that are less than 0.5 ioa with plateBox.
-    # re-order the remaining boxes by startX
-    plates = []
-    for plateBox in plateBoxes:
-      chars = []
-      # loop over the lists: boxes, scores and labels
-      # and discard chars that have low ioa with plateBox
-      # The boxes scores and labels associated with plates have already been removed
-      # so the lists only reference characters
-      for (charBox, score, label) in zip(boxes, scores, labels):
-        ioa = self.intersectionOverArea(charBox, plateBox)
-        if ioa > 0.5:
-          label = categoryIdx[label]
-          label = "{}".format(label["name"])
-          char = [charBox[1], charBox, label, score]
-          chars.append(char)
-      # sort the remaining chars by horizontal location
-      chars = sorted(chars, key=lambda x: x[0])
-      if len(chars) > 0:
-        plates.append(chars)
-      else:
-        plates.append(None)
-
+  # Scrub the chars within the plates. Once cleaned, generate
+  # lists of char text, char boxes, and and char scores for every plate
+  def processPlates(self, plates, plateBoxes, plateScores, scores):
     # Working from left to right, discard any charBox that has an iou > 'charIOUMax'
     # with the box immediately to the left.
     # Loop over the chars, adding chars to charsNoOverLap, if there is no overlap
@@ -190,6 +144,60 @@ class PlateFinder:
     if licensePlateFound == True and len(plateCompleteScores) == 0:
       print("[INFO] license plate found but now rejected")
 
+    return charTexts, charBoxes, charScores, plateCompleteScores
+
+
+  # Find plate boxes and the text associated with each plate
+  def findPlates(self, boxes, scores, labels, categoryIdx):
+    licensePlateFound = False
+    # set mask to all true
+    mask = np.ones(len(scores), dtype=bool)
+
+    # Start by discarding all boxes below min score, and moving plate boxes to separate list
+    plateBoxes = []
+    plateScores = []
+    for (i, (box, score, label)) in enumerate(zip(boxes, scores, labels)):
+      if score < self.minConfidence:
+        mask[i] = False
+        continue
+      label = categoryIdx[label]
+      label = "{}".format(label["name"])
+      # if label is plate, then append box to plateBoxes list and discard from original lists
+      if label == "plate":
+        mask[i] = False
+        plateBoxes.append(box)
+        plateScores.append(score)
+
+    # update the lists to remove discarded boxes
+    boxes = boxes[mask,...]
+    scores = scores[mask,...]
+    labels = labels[mask,...]
+
+    # For each plate box, discard char boxes that are less than 0.5 ioa with plateBox.
+    # re-order the remaining boxes by startX
+    plates = []
+    for plateBox in plateBoxes:
+      chars = []
+      # loop over the lists: boxes, scores and labels
+      # and discard chars that have low ioa with plateBox
+      # The boxes scores and labels associated with plates have already been removed
+      # so the lists only reference characters
+      for (charBox, score, label) in zip(boxes, scores, labels):
+        ioa = self.intersectionOverArea(charBox, plateBox)
+        if ioa > 0.5:
+          label = categoryIdx[label]
+          label = "{}".format(label["name"])
+          char = [charBox[1], charBox, label, score]
+          chars.append(char)
+      # sort the remaining chars by horizontal location
+      chars = sorted(chars, key=lambda x: x[0])
+      if len(chars) > 0:
+        plates.append(chars)
+      else:
+        plates.append(None)
+
+    charTexts, charBoxes, charScores, plateCompleteScores = self.processPlates(plates, plateBoxes, plateScores, scores)
+
     return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores
 
   # Find ground truth plate boxes and the text associated with each plate
@@ -245,7 +253,7 @@ class PlateFinder:
         charBoxes.append([])
 
     if (len(plateBoxes) != len(plates) or len(plateBoxes) != len(charTexts)):
-      print("[ERROR]: len(platesBoxes):{} != len(plates):{} or len(platesBoxes):{} != len(charText):{}"
+      print("[ERROR]: len(platesBoxes):{} !plates= len(plates):{} or len(platesBoxes):{} != len(charText):{}"
             .format(len(plateBoxes), len(plates), len(plateBoxes), len(charTexts)))
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes

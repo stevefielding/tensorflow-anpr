@@ -1,5 +1,5 @@
 # USAGE
-# python predict.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
+# python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
 # --labels datasets/records/classes.pbtxt --annotations_dir images/C920_images/2018_06_14_ann --num-classes 37 \
 # --image_display False
 # Scans the annotations_dir and looks for PASCAL_VOC annotations with verified=yes, reads all the associated image
