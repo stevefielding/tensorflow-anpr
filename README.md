@@ -38,7 +38,7 @@ if it is not within a plate bounding box.
 ````
 python gen_plates.py --numImages 1000 --imagePath artificial_images/CA --xmlPath artificial_images/CA_ann
 ````
-##### build_anpr_records.py:
+##### build_anpr_records_faster_rcnn.py:
 Reads a group of PASCAL VOC style xml annotation files, and combines with associated images 
 to build a TFrecord dataset. Requires a predefined label map file that maps labels to integers.  
 Will only use images where the corresponding annotation file has the verified field set to 'yes'.  

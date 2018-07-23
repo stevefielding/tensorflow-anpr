@@ -32,6 +32,7 @@ from base2designs.plates.plateFinder import PlateFinder
 from base2designs.plates.plateXmlExtract import PlateXmlExtract
 from base2designs.plates.plateDisplay import PlateDisplay
 from base2designs.plates.plateCompare import PlateCompare
+import time
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -47,7 +48,9 @@ ap.add_argument("-c", "--min-confidence", type=float, default=0.5,
   help="minimum probability used to filter weak detections")
 ap.add_argument("-d", "--image_display", type=bool, default="false",
   help="Enable display of ground truth and predicted annotated images")
+
 args = vars(ap.parse_args())
+
 
 # initialize the model
 model = tf.Graph()
@@ -94,9 +97,11 @@ with model.as_default():
     # get the list of verified xml files
     xmlFileCnt, xmlFiles = plateXmlExtract.getXmlVerifiedFileList(args["annotations_dir"])
     print("[INFO] Processing {} xml annotation files ...".format(xmlFileCnt))
+    frameCnt = 0
+    start_time = time.time()
     # loop over the xml files
     for xmlFile in xmlFiles:
-
+      frameCnt += 1
       # grab the image, and get the ground truth boxes and labels
       image, boxes, labels = plateXmlExtract.getXmlData(xmlFile)
       # get the image shape
@@ -163,6 +168,12 @@ with model.as_default():
         # wait for key, so that image windows are displayed
         cv2.waitKey(0)
 
+# print some performance statistics
+curTime = time.time()
+processingTime = curTime - start_time
+fps = frameCnt / processingTime
+print("[INFO] Processed {} frames in {:.2f} seconds. Frame rate: {:.2f} Hz".format(frameCnt, processingTime, fps))
+	
 # get some stats and print
 platesWithCharCorrect, platesCorrect, platesIncorrect, charsCorrect, charsIncorrect = plateCompare.calcStats()
 print("[INFO] platesWithCharCorrect: {:.1f}%, platesCorrect: {:.1f}%, platesIncorrect: {:.1f}%, charsCorrect: {:.1f}%, charsIncorrect: {:.1f}%" \

@@ -28,7 +28,6 @@
   #######
   # CNN pre-processing
   #######
-  "plateMargin": 10, # Add an extra margin around the cropped plate image. This allows extra room for image aug during training
   "searchCropFactorX": 1, # Reduce search area x and y dimensions by this factor. searchCropFactor = 1 = no cropping
   "searchCropFactorY": 1, # Reduce search area x and y dimensions by this factor. searchCropFactor = 1 = no cropping
   "frameDecimationFactor": 1, # decimate the frame rate to reduce the processing load
@@ -36,9 +35,10 @@
   #######
   # CNN model CONFIGURATION
   #######
-  "model":"datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb", # tensorflow Faster RCNN object detector
+  "model":"datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb", # tensorflow Faster RCNN object detector
   "labels":"datasets/records/classes.pbtxt", # detector class labels
   "num_classes": 37,
+  "charIOUMax": 0.3,
   "min_confidence": 0.5
 
 }

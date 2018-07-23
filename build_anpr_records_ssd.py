@@ -43,6 +43,7 @@ flags.DEFINE_boolean('ignore_difficult_instances', False, 'Whether to ignore '
                      'difficult instances')
 flags.DEFINE_boolean('view_mode', False, 'View mode enable')
 flags.DEFINE_float('image_scale_factor',1.0,'image scale factor')
+flags.DEFINE_string('class_sel', 'all', 'Select classes; all, cars, plates, chars')
 
 FLAGS = flags.FLAGS
 
@@ -88,6 +89,169 @@ def create_train_test_split(annotations_dir):
     test_size=0.15, random_state=42)
   return (trainFiles, testFiles)
 
+# generate new bounding box for cropped image
+# xOffset = 0, yOffset = 0, corresponds to full image. ie no cropping
+# warn if the box is outside the crop area
+def getBox(plateXMin, plateYMin, plateXMax, plateYMax, filePath, xmin, ymin, xmax, ymax):
+  if plateXMin > xmin:
+    xmin = plateXMin
+    print("[WARNING] plateXMin > xmin in \"{}\"".format(filePath))
+  if plateYMin > ymin:
+    ymin = plateYMin
+    print("[WARNING] plateYMin > ymin in \"{}\"".format(filePath))
+  if plateYMax < ymax:
+    ymax = plateYMax
+    print("[WARNING] plateYMax < ymax in \"{}\"".format(filePath))
+  if plateXMax < xmax:
+    xmax = plateXMax
+    print("[WARNING] plateXMax < xmax in \"{}\"".format(filePath))
+
+  return xmin - plateXMin, ymin - plateYMin, xmax - plateXMin, ymax - plateYMin
+
+
+def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
+                 ignore_difficult_instances, image_path,
+                 dataFileName, label_map_dict):
+
+  # create temporary files for storing images
+  imageTempFile = tempfile.NamedTemporaryFile(suffix='.jpg')
+  imageTempFileName = imageTempFile.name
+
+  # Load as opencv image, resize and write to temporary file
+  imageFull = cv2.imread(image_path)
+  imageHeight, imageWidth = imageFull.shape [:2]
+  imageResized = imutils.resize(imageFull, width=int(imageWidth * imageScaleFactor))
+  cv2.imwrite(imageTempFileName, imageResized)
+
+  # if 'chars' class only, then crop the plate image, and overwrite the image, image width, and image height
+  # with the plate image, PIW, and PIH
+  plateXMin = 0
+  plateYMin = 0
+  plateXMax = 0
+  plateYMax = 0
+  if classSelect == 'chars':
+    plateFound = False
+    for obj in dataObjects:
+      if obj['name'] == 'plate':
+        plateXMin = int(obj['bndbox']['xmin'])
+        plateYMin = int(obj['bndbox']['ymin'])
+        plateXMax = int(obj['bndbox']['xmax'])
+        plateYMax = int(obj['bndbox']['ymax'])
+        plateImage = imageResized[plateYMin: plateYMax,
+                     plateXMin: plateXMax,...]
+        cv2.imwrite(imageTempFileName, plateImage)
+        imageHeight, imageWidth = plateImage.shape[:2]
+        plateFound = True
+        continue
+    if plateFound == False:
+      print("[ERROR] No plate box found in \"{}\"".format(image_path))
+      quit()
+
+  if view_mode == True:
+    cvImage = cv2.imread(imageTempFileName)
+  with tf.gfile.GFile(imageTempFileName, 'rb') as fid:
+    encoded_jpg = fid.read()
+  encoded_jpg_io = io.BytesIO(encoded_jpg)
+  image = PIL.Image.open(encoded_jpg_io)
+  if image.format != 'JPEG':
+    raise ValueError('Image format not JPEG')
+  key = hashlib.sha256(encoded_jpg).hexdigest()
+
+  # get the image dims and scale by imageScaleFactor
+  width_original = imageWidth
+  height_original = imageHeight
+  width_scaled = int(width_original * imageScaleFactor)
+  height_scaled = int(height_original * imageScaleFactor)
+
+  xmins = []
+  ymins = []
+  xmaxs = []
+  ymaxs = []
+  classes = []
+  classes_text = []
+  truncated = []
+  poses = []
+  difficult_obj = []
+  for obj in dataObjects:
+    difficult = bool(int(obj['difficult']))
+    if ignore_difficult_instances and difficult:
+      continue
+
+    # if plates only class selected, then only generate bounding boxes for plates
+    if classSelect == 'plates' and obj['name'] != 'plate':
+      continue
+
+    # if chars only class selected, then only generate bounding boxes for chars
+    if classSelect == 'chars' and obj['name'] == 'plate':
+      continue
+
+    difficult_obj.append(int(difficult))
+    if classSelect == 'chars':
+      xmin, ymin, xmax, ymax = getBox(plateXMin, plateYMin, plateXMax, plateYMax, image_path,
+                                    int(obj['bndbox']['xmin']), int(obj['bndbox']['ymin']),
+                                    int(obj['bndbox']['xmax']), int(obj['bndbox']['ymax']))
+    else:
+      xmin, ymin, xmax, ymax = (int(obj['bndbox']['xmin']), int(obj['bndbox']['ymin']),
+                                int(obj['bndbox']['xmax']), int(obj['bndbox']['ymax']))
+    xmins.append(float(xmin) / width_original)
+    ymins.append(float(ymin) / height_original)
+    xmaxs.append(float(xmax) / width_original)
+    ymaxs.append(float(ymax) / height_original)
+    classes_text.append(obj['name'].encode('utf8'))
+    classes.append(label_map_dict[obj['name']])
+    truncated.append(int(obj['truncated']))
+    poses.append(obj['pose'].encode('utf8'))
+
+    if view_mode == True:
+      # denormalize the bounding box coordinates, and add bbox rect to image
+      startX = int(xmins[-1] * width_scaled)
+      startY = int(ymins[-1] * height_scaled)
+      endX = int(xmaxs[-1] * width_scaled)
+      endY = int(ymaxs[-1] * height_scaled)
+      # if plate box then display the bbox in red
+      if classes[-1] == 1:
+        color = (0,0,255)
+      # else display the char box in green and display the char
+      else:
+        color = (0,255,0)
+        text = str(classes_text[-1])
+        m = re.match(r"b.*?(\w+)", text)
+        cv2.putText(cvImage, m.group(1), (startX, startY), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+      # draw the bounding box on the image
+      cv2.rectangle(cvImage, (startX, startY), (endX, endY),
+                    color, 1)
+
+  if view_mode == True:
+    # show the output image
+    cv2.imshow("Image", cvImage)
+    cv2.imwrite("myImage.jpg",cvImage)
+    cv2.waitKey(0)
+
+  example = tf.train.Example(features=tf.train.Features(feature={
+      'image/height': dataset_util.int64_feature(height_scaled),
+      'image/width': dataset_util.int64_feature(width_scaled),
+      'image/filename': dataset_util.bytes_feature(
+        dataFileName.encode('utf8')),
+      'image/source_id': dataset_util.bytes_feature(
+        dataFileName.encode('utf8')),
+      'image/key/sha256': dataset_util.bytes_feature(key.encode('utf8')),
+      'image/encoded': dataset_util.bytes_feature(encoded_jpg),
+      'image/format': dataset_util.bytes_feature('jpeg'.encode('utf8')),
+      'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
+      'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
+      'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
+      'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
+      'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
+      'image/object/class/label': dataset_util.int64_list_feature(classes),
+      'image/object/difficult': dataset_util.int64_list_feature(difficult_obj),
+      'image/object/truncated': dataset_util.int64_list_feature(truncated),
+      'image/object/view': dataset_util.bytes_list_feature(poses),
+  }))
+  return example
+
+
+
+
 def dict_to_tf_example(data,
                        dataset_directory,
                        label_map_dict, xmlFilePath, imageScaleFactor,
@@ -112,9 +276,6 @@ def dict_to_tf_example(data,
   Raises:
     ValueError: if the image pointed to by data['filename'] is not a valid JPEG
   """
-  # create temporary file for storing scaled image
-  imageTempFile = tempfile.NamedTemporaryFile(suffix='.jpg')
-  imageTempFileName = imageTempFile.name
 
 
   # data['folder'] should be the name of a sub-directory of datset_directory
@@ -126,99 +287,17 @@ def dict_to_tf_example(data,
   filePathRoot = os.path.join(filePathRoot, data['folder'])
   full_path = os.path.join(filePathRoot, data['filename'])
 
-  # Load as opencv image, resize and write to temporary file
-  imageFull = cv2.imread(full_path)
-  width = imageFull.shape[1]
-  imageResized = imutils.resize(imageFull, width=int(width * imageScaleFactor))
-  cv2.imwrite(imageTempFileName, imageResized)
 
 
-  if view_mode == True:
-    cvImage = cv2.imread(imageTempFileName)
-  with tf.gfile.GFile(imageTempFileName, 'rb') as fid:
-    encoded_jpg = fid.read()
-  encoded_jpg_io = io.BytesIO(encoded_jpg)
-  image = PIL.Image.open(encoded_jpg_io)
-  if image.format != 'JPEG':
-    raise ValueError('Image format not JPEG')
-  key = hashlib.sha256(encoded_jpg).hexdigest()
+  exampleFindPlate = processImage('plates', view_mode,
+                                  imageScaleFactor, data['object'], ignore_difficult_instances, full_path,
+                                  data['filename'], label_map_dict)
 
-  # get the image dims and scale by imageScaleFactor
-  width_original = int(data['size']['width'])
-  height_original = int(data['size']['height'])
-  width_scaled = int(width_original * imageScaleFactor)
-  height_scaled = int(height_original * imageScaleFactor)
+  exampleFindChars = processImage('chars', view_mode,
+                                  1.0, data['object'], ignore_difficult_instances, full_path,
+                                  data['filename'], label_map_dict)
 
-  xmin = []
-  ymin = []
-  xmax = []
-  ymax = []
-  classes = []
-  classes_text = []
-  truncated = []
-  poses = []
-  difficult_obj = []
-  for obj in data['object']:
-    difficult = bool(int(obj['difficult']))
-    if ignore_difficult_instances and difficult:
-      continue
-
-    difficult_obj.append(int(difficult))
-    xmin.append(float(obj['bndbox']['xmin']) / width_original)
-    ymin.append(float(obj['bndbox']['ymin']) / height_original)
-    xmax.append(float(obj['bndbox']['xmax']) / width_original)
-    ymax.append(float(obj['bndbox']['ymax']) / height_original)
-    classes_text.append(obj['name'].encode('utf8'))
-    classes.append(label_map_dict[obj['name']])
-    truncated.append(int(obj['truncated']))
-    poses.append(obj['pose'].encode('utf8'))
-
-    if view_mode == True:
-      # denormalize the bounding box coordinates, and add bbox rect to image
-      startX = int(xmin[-1] * width_scaled)
-      startY = int(ymin[-1] * height_scaled)
-      endX = int(xmax[-1] * width_scaled)
-      endY = int(ymax[-1] * height_scaled)
-      # if plate box then display the bbox in red
-      if classes[-1] == 1:
-        color = (0,0,255)
-      # else display the char box in green and display the char
-      else:
-        color = (0,255,0)
-        text = str(classes_text[-1])
-        m = re.match(r"b.*?(\w+)", text)
-        cv2.putText(cvImage, m.group(1), (startX, startY), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-      # draw the bounding box on the image
-      cv2.rectangle(cvImage, (startX, startY), (endX, endY),
-                    color, 1)
-
-  if view_mode == True:
-    # show the output image
-    cv2.imshow("Image", cvImage)
-    cv2.imwrite("myImage.jpg",cvImage)
-    cv2.waitKey(0)
-
-  example = tf.train.Example(features=tf.train.Features(feature={
-      'image/height': dataset_util.int64_feature(height_scaled),
-      'image/width': dataset_util.int64_feature(width_scaled),
-      'image/filename': dataset_util.bytes_feature(
-          data['filename'].encode('utf8')),
-      'image/source_id': dataset_util.bytes_feature(
-          data['filename'].encode('utf8')),
-      'image/key/sha256': dataset_util.bytes_feature(key.encode('utf8')),
-      'image/encoded': dataset_util.bytes_feature(encoded_jpg),
-      'image/format': dataset_util.bytes_feature('jpeg'.encode('utf8')),
-      'image/object/bbox/xmin': dataset_util.float_list_feature(xmin),
-      'image/object/bbox/xmax': dataset_util.float_list_feature(xmax),
-      'image/object/bbox/ymin': dataset_util.float_list_feature(ymin),
-      'image/object/bbox/ymax': dataset_util.float_list_feature(ymax),
-      'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
-      'image/object/class/label': dataset_util.int64_list_feature(classes),
-      'image/object/difficult': dataset_util.int64_list_feature(difficult_obj),
-      'image/object/truncated': dataset_util.int64_list_feature(truncated),
-      'image/object/view': dataset_util.bytes_list_feature(poses),
-  }))
-  return example
+  return (exampleFindPlate, exampleFindChars)
 
 def create_record(imageList, image_dir, label_map_file, recordFilePath, imageScaleFactor, view_mode=False,
                   ignore_difficult_instances=False):
@@ -237,10 +316,11 @@ def create_record(imageList, image_dir, label_map_file, recordFilePath, imageSca
       xml_str = fid.read()
     xml = etree.fromstring(xml_str)
     data = dataset_util.recursive_parse_xml_to_dict(xml)['annotation']
-    tf_example = dict_to_tf_example(data, image_dir, label_map_dict, example, imageScaleFactor,
+    tf_example_plate, tf_example_chars = dict_to_tf_example(data, image_dir, label_map_dict, example, imageScaleFactor,
                                     ignore_difficult_instances, view_mode=view_mode)
     if view_mode == False:
-      writer.write(tf_example.SerializeToString())
+      writer.write(tf_example_plate.SerializeToString())
+      writer.write(tf_example_chars.SerializeToString())
 
   if view_mode == False:
     writer.close()
@@ -253,6 +333,7 @@ def main(_):
   label_map_file = FLAGS.label_map_file
   view_mode = FLAGS.view_mode
   imageScaleFactor = FLAGS.image_scale_factor
+  classSelect = FLAGS.class_sel
 
   # split the dataset into training data and testing data
   # Note that we are splitting the xml annotation files
@@ -260,18 +341,18 @@ def main(_):
   # it will not be used
   (trainList,testList) = create_train_test_split(annotations_dir)
   print("[INFO] Found {} annotated images".format(len(trainList) + len(testList)))
-  print("[INFO] Splitting into {} training images, and {} testing images".format(len(trainList), len(testList)))
+  print("[INFO] Splitting into {} training images, and {} testing images".format(len(trainList)*2, len(testList)*2))
 
   # create the training record
   trainingFilePath = os.path.join(FLAGS.record_dir , FLAGS.train_record_file)
-  print("[INFO] Writing \"{}\", containing {} images".format(trainingFilePath, len(trainList)))
+  print("[INFO] Writing \"{}\", containing {} images".format(trainingFilePath, len(trainList)*2))
   create_record(trainList, image_dir, label_map_file,
                 trainingFilePath, imageScaleFactor, view_mode=view_mode,
                 ignore_difficult_instances=FLAGS.ignore_difficult_instances)
 
   # create the testing record
   testingFilePath = os.path.join(FLAGS.record_dir , FLAGS.test_record_file)
-  print("[INFO] Writing \"{}\", containing {} images".format(testingFilePath, len(testList)))
+  print("[INFO] Writing \"{}\", containing {} images".format(testingFilePath, len(testList)*2))
   create_record(testList, image_dir, label_map_file,
                 testingFilePath, imageScaleFactor, view_mode=view_mode,
                 ignore_difficult_instances=FLAGS.ignore_difficult_instances)

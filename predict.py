@@ -3,7 +3,7 @@
 #  --labels SJ7STAR_images/records/classes.pbtxt --image SJ7STAR_images/2018_02_26 --num-classes 37
 # import the necessary packages
 import argparse
-
+import time
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -24,6 +24,11 @@ ap.add_argument("-n", "--num-classes", type=int, required=True,
   help="# of class labels")
 ap.add_argument("-c", "--min-confidence", type=float, default=0.5,
   help="minimum probability used to filter weak detections")
+ap.add_argument("-v", "--view-mode", default="true",
+  help="view results")
+ap.add_argument("-d", "--image_display", type=bool, default="false",
+  help="Enable display of ground truth and predicted annotated images")
+
 args = vars(ap.parse_args())
 
 # initialize a set of colors for our class labels
@@ -62,7 +67,11 @@ with model.as_default():
     imageTensor = model.get_tensor_by_name("image_tensor:0")
     boxesTensor = model.get_tensor_by_name("detection_boxes:0")
 
-    for imagePath in paths.list_images(args["imagePath"]):
+    imagePaths = paths.list_images(args["imagePath"])
+    frameCnt = 0
+    start_time = time.time()
+    for imagePath in imagePaths:
+      frameCnt += 1
       # for each bounding box we would like to know the score
       # (i.e., probability) and class label
       scoresTensor = model.get_tensor_by_name("detection_scores:0")
@@ -100,8 +109,8 @@ with model.as_default():
       scores = np.squeeze(scores)
       labels = np.squeeze(labels)
       plates = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
-      for plate in plates:
-        print(plate)
+      #for plate in plates:
+      #  print(plate)
 
       # loop over the bounding box predictions
       for (box, score, label) in zip(boxes, scores, labels):
@@ -117,18 +126,25 @@ with model.as_default():
         endX = int(endX * W)
         endY = int(endY * H)
 
-        # draw the prediction on the output image
-        label = categoryIdx[label]
-        idx = int(label["id"]) - 1
-        #label = "{}: {:.2f}".format(label["name"], score)
-        label = "{}".format(label["name"])
-        cv2.rectangle(output, (startX, startY), (endX, endY),
-          COLORS[idx], 1)
-        y = startY - 10 if startY - 10 > 10 else startY + 10
-        cv2.putText(output, label, (startX, y),
-          cv2.FONT_HERSHEY_SIMPLEX, 0.3, COLORS[idx], 1)
+        if args["image_display"] == "true":
+          # draw the prediction on the output image
+          label = categoryIdx[label]
+          idx = int(label["id"]) - 1
+          #label = "{}: {:.2f}".format(label["name"], score)
+          label = "{}".format(label["name"])
+          cv2.rectangle(output, (startX, startY), (endX, endY),
+            COLORS[idx], 1)
+          y = startY - 10 if startY - 10 > 10 else startY + 10
+          cv2.putText(output, label, (startX, y),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.3, COLORS[idx], 1)
 
+      if args["image_display"] == "true":
+        # show the output image
+        cv2.imshow("Output", output)
+        cv2.waitKey(0)
 
-      # show the output image
-      cv2.imshow("Output", output)
-      cv2.waitKey(0)
+    # print some performance statistics
+    curTime = time.time()
+    processingTime = curTime - start_time
+    fps = frameCnt / processingTime
+    print("[INFO] Processed {} frames in {:.2f} seconds. Frame rate: {:.2f} Hz".format(frameCnt, processingTime, fps))
