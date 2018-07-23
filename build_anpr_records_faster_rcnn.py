@@ -3,11 +3,14 @@ Enable view_mode if you wish to check your annotations
 If view mode is enabled, then the record file will not be written
 
 Example usage:
-    python build_anpr_records_faster_rcnn.py \
-  --image_dir=images --record_dir=datasets/records \
-  --annotations_dir=images --label_map_file=datasets/records/classes.pbtxt \
-  --view_mode=False --image_scale_factor=0.5 --test_record_file=testing_scaled.record \
-  --train_record_file=training_scaled.record
+  python build_anpr_records_faster_rcnn.py \
+  --image_dir=images \
+  --record_dir=datasets/records \
+  --annotations_dir=images \
+  --label_map_file=datasets/records/classes.pbtxt \
+  --view_mode=False \
+  --test_record_file=testing_faster_rcnn.record \
+  --train_record_file=training_faster_rcnn.record
 """
 from __future__ import absolute_import
 from __future__ import division
