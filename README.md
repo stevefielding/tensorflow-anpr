@@ -43,8 +43,33 @@ Reads a group of PASCAL VOC style xml annotation files, and combines with associ
 to build a TFrecord dataset. Requires a predefined label map file that maps labels to integers.  
 Will only use images where the corresponding annotation file has the verified field set to 'yes'.  
 ````
-python build_anpr_records.py --image_dir=images --record_dir=datasets/records \  
---annotations_dir=images --label_map_file=datasets/records/classes.pbtxt --view_mode=False
+python build_anpr_records_faster_rcnn.py \
+--image_dir=images \
+--record_dir=datasets/records \
+--annotations_dir=images \
+--label_map_file=datasets/records/classes.pbtxt \
+--view_mode=False \
+--test_record_file=testing_faster_rcnn.record \
+--train_record_file=training_faster_rcnn.record
+````
+##### build_anpr_records_ssd.py:
+Reads a group of PASCAL VOC style xml annotation files, and combines with associated images 
+to build a TFrecord dataset. Requires a predefined label map file that maps labels to integers.  
+Will only use images where the corresponding annotation file has the verified field set to 'yes'.  
+Similar to build_anpr_records_faster_rcnn.py,except that it generates two pairs of image/annotations for
+every original image/annotation file pair. The original image is split into a full image and a cropped image
+of the license plate. The original annotation is split into a plate annotation, and a character annotation. The images are padded to
+make them square, and the full image is scaled down to avoid problems with excessive memory usage during 
+training.
+````
+python build_anpr_records_ssd.py \
+--record_dir=datasets/records \
+--annotations_dir=images \
+--label_map_file=datasets/records/classes.pbtxt \
+--view_mode=False \
+--image_scale_factor=0.4 \
+--test_record_file=testing_scaled_mixed_allsquare.record \
+--train_record_file=training_scaled_mixed_allsquare.record
 ````
 ##### Directory layout
 It is important to spend some time figuring out the best directory layout.   
@@ -151,12 +176,15 @@ the output of images with duplicate plates.
 python predict_video.py --conf conf/lplates_smallset.json
 ````
 
-##### predict_and_score.py
+##### predict_and_score_faster_rcnn.py
 Test a trained model against an annotated dataset. Annotations must be in PASCAL VOC style xml files
 Run with image_display true if you wish to see each annotated image displayed.
 ````
-python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
---labels datasets/records/classes.pbtxt --annotations_dir images/C920_images/2018_06_14_ann --num-classes 37 \
+python predict_and_score_faster_rcnn.py \
+--model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
+--labels datasets/records/classes.pbtxt \
+--annotations_dir images/C920_images \
+--num-classes 37 \
 --image_display false
 ````
 Your results should look something like this:
@@ -166,4 +194,43 @@ Your results should look something like this:
 ````
 platesWithCharCorrect: plates where the plate box, char boxes and char text all match  
 platesCorrect: plate boxes that match with iou > 0.5  
-charsCorrect: chars where char box and char text match
+charsCorrect: chars where char box and char text match 
+ 
+##### predict_and_score_ssd.py
+Test a trained model against an annotated dataset. Annotations must be in PASCAL VOC style xml files
+Run with image_display true if you wish to see each annotated image displayed.
+Expects two types of image/annotation pairs; full images with associated plate annotation, and 
+cropped plate images with associated character annotations.
+````
+python predict_and_score_ssd.py \
+--model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+--labels datasets/records/classes.pbtxt \
+--annotations_dir images/C920_images \
+--num-classes 37 \
+--min-confidence 0.1
+````
+Your results should look something like this:
+````
+[INFO] Processed 925 frames in 70.13 seconds. Frame rate: 13.19 Hz
+[INFO] platesWithCharCorrect_recall: 93.2%, platesWithCharCorrect_precision: 93.9%, 
+       plateFrames_recall: 99.2%, plateFrames_precision: 100.0%, 
+       chars_recall: 98.3%, chars_precision: 99.2%
+[INFO] Definitions. Precision: Percentage of all the objects detected that are correct. Recall: Percentage of ground truth objects that are detected
+[INFO] Processed 925 xml annotation files
+````
+And an explanation of the performance metrics:
+
+````
+platesWithCharCorrect_recall - Plates detected in correct location and containing correct characters in the correct locations
+                               divided by the number of ground truth plates
+platesWithCharCorrect_precision - Plates detected in correct location and containing correct characters in the correct locations
+                                  divided by the total number of plates predicted (ie true pos plus false pos)
+plateFrames_recall - Plate frames in correct location (no checking of characters) divided by the
+                     number of ground truth plates
+plateFrames_precision - Plate frames in correct location (no checking of characters) divided by the
+                        the total number of plates predicted (ie true pos plus false pos)
+chars_recall - Characters detected in the correct place with the correct contents
+               divided by the number of ground truth characters
+chars_precision - Chars detected outside of the correct location, or the location is correct,
+                  but the contents are wrong. Divided by the total number of plates predicted (ie true pos plus false pos)
+ ````

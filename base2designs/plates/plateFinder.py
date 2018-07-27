@@ -70,10 +70,11 @@ class PlateFinder:
 
   # Scrub the chars within the plates. Once cleaned, generate
   # lists of char text, char boxes, and and char scores for every plate
-  def processPlates(self, plates, plateBoxes, plateScores, scores):
+  def processPlates(self, plates, plateBoxes, plateScores):
     # Working from left to right, discard any charBox that has an iou > 'charIOUMax'
     # with the box immediately to the left.
     # Loop over the chars, adding chars to charsNoOverLap, if there is no overlap
+    licensePlateFound = False
     platesFinal = []
     for plate in plates:
       charsNoOverlap = []
@@ -116,9 +117,9 @@ class PlateFinder:
         charBoxes.append([])
         charScores.append([])
 
-    # generate mask to reject plates with; low number of chars, plates on the edge of the frame
+    # Calculate the average score per plate.
+    # Generate mask to reject plates with; low number of chars, plates on the edge of the frame
     # and plates with a low average score.
-    mask = np.ones(len(scores), dtype=bool)
     plateCompleteScores = []
     mask = np.ones(len(plateScores), dtype=bool)
     for (i, (plateBox, plateScore, chScores)) in enumerate(zip(plateBoxes, plateScores, charScores)):
@@ -139,12 +140,15 @@ class PlateFinder:
       charBoxes = list(np.array(charBoxes)[mask,...])
 
     if (len(plateBoxes) != len(plateCompleteScores) or len(plateBoxes) != len(charTexts)):
-      print("[ERROR]: len(platesBoxes):{} != len(platesFinal):{} or len(platesBoxes):{} != len(charText):{}"
+      print("[ERROR]: len(platesBoxes):{} != len(plateCompleteScores):{} or len(platesBoxes):{} != len(charTexts):{}"
             .format(len(plateBoxes), len(plateCompleteScores), len(plateBoxes), len(charTexts)))
+    if (len(plateBoxes) != len(charBoxes)):
+      print("[ERROR]: len(platesBoxes):{} != len(charBoxes):{}"
+            .format(len(plateBoxes), len(charBoxes)))
     if licensePlateFound == True and len(plateCompleteScores) == 0:
       print("[INFO] license plate found but now rejected")
 
-    return charTexts, charBoxes, charScores, plateCompleteScores
+    return plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores
 
 
   # Find plate boxes and the text associated with each plate
@@ -196,12 +200,47 @@ class PlateFinder:
       else:
         plates.append(None)
 
-    charTexts, charBoxes, charScores, plateCompleteScores = self.processPlates(plates, plateBoxes, plateScores, scores)
+    plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores = self.processPlates(plates, plateBoxes, plateScores)
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores
 
+
+
+
+  # Find only plates, and ignore chars
+  # return the plateBoxes and plateScores
+  def findPlatesOnly(self, boxes, scores, labels, categoryIdx):
+    licensePlateFound = False
+
+    # Discard all boxes below min score, and move plate boxes to separate list
+    plateBoxes = []
+    plateScores = []
+    # loop over all the boxes and associated scores and labels
+    for (i, (box, score, label)) in enumerate(zip(boxes, scores, labels)):
+      if score < self.minConfidence:
+        continue
+      label = categoryIdx[label]
+      label = "{}".format(label["name"])
+      # if label is plate, then append data to new lists
+      if label == "plate":
+        licensePlateFound = True
+        plateBoxes.append(box)
+        plateScores.append(score)
+
+    return licensePlateFound, plateBoxes, plateScores
+
+  def scaleBoxes(self, boxes, hScale, wScale):
+    boxes_scaled = []
+    for box in boxes:
+      box_scaled = (box[0] / hScale,
+                    box[1] / wScale,
+                    box[2] / hScale,
+                    box[3] / wScale)
+      boxes_scaled.append(np.array(box_scaled))
+    return boxes_scaled
+
   # Find ground truth plate boxes and the text associated with each plate
-  def findGroundTruthPlates(self, boxes, labels):
+  def findGroundTruthPlates(self, boxes, labels, scale=False, hScale=1.0, wScale=1.0):
     labels = [x.decode("ASCII") for x in labels]
     labels = np.array(labels)
     licensePlateFound = False
@@ -251,6 +290,14 @@ class PlateFinder:
       else:
         charTexts.append([])
         charBoxes.append([])
+
+    # Adjust the plate box gt co-ordinates to account for the padding performed on the image used for prediction
+    if scale == True:
+      plateBoxes = self.scaleBoxes(plateBoxes, hScale, wScale)
+      chBoxes_scaled = []
+      for chBoxes in charBoxes:
+        chBoxes_scaled.append(self.scaleBoxes(chBoxes, hScale, wScale))
+      charBoxes = chBoxes_scaled
 
     if (len(plateBoxes) != len(plates) or len(plateBoxes) != len(charTexts)):
       print("[ERROR]: len(platesBoxes):{} !plates= len(plates):{} or len(platesBoxes):{} != len(charText):{}"

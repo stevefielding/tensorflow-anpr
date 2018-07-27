@@ -23,6 +23,7 @@ import logging
 import os
 import tempfile
 import imutils
+import numpy as np
 
 from lxml import etree
 import PIL.Image
@@ -92,7 +93,6 @@ def create_train_test_split(annotations_dir):
   return (trainFiles, testFiles)
 
 # generate new bounding box for cropped image
-# xOffset = 0, yOffset = 0, corresponds to full image. ie no cropping
 # warn if the box is outside the crop area
 def getBox(plateXMin, plateYMin, plateXMax, plateYMax, filePath, xmin, ymin, xmax, ymax):
   if plateXMin > xmin:
@@ -110,12 +110,33 @@ def getBox(plateXMin, plateYMin, plateXMax, plateYMax, filePath, xmin, ymin, xma
 
   return xmin - plateXMin, ymin - plateYMin, xmax - plateXMin, ymax - plateYMin
 
+def genSquareImage(image):
+  debugFlag = False
+  blue = image[...,0]
+  green = image[...,1]
+  red = image[...,2]
+  blueAv = np.sum(blue)/ blue.size
+  greenAv = np.sum(green)/ green.size
+  redAv = np.sum(red)/ red.size
+  dimMax = max(image.shape[0], image.shape[1])
+  imageOut = np.empty((dimMax,dimMax,3), dtype=np.uint8)
+  imageOut[...,0] = np.uint8(blueAv)
+  imageOut[...,1] = np.uint8(greenAv)
+  imageOut[...,2] = np.uint8(redAv)
+  if image.shape[0] <= image.shape[1]:
+    imageOut[0:image.shape[0],...] = image
+  else:
+    imageOut[:,0:image.shape[1],...] = image
+    #debugFlag = True
+  return imageOut, debugFlag
+
 # Generate either an TF example of a labelled plate, or the labelled chars within the plate.
 # The labelled plate will use the entire image at 'image_path', but the labelled chars will
 # use a cropped plate from the image at 'image_path'
 def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
                  ignore_difficult_instances, image_path,
                  dataFileName, label_map_dict):
+  debugFlag = False
 
   # create temporary files for storing images
   imageTempFile = tempfile.NamedTemporaryFile(suffix='.jpg')
@@ -123,8 +144,11 @@ def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
 
   # Load as opencv image, resize and write to temporary file
   imageFull = cv2.imread(image_path)
-  imageHeight, imageWidth = imageFull.shape [:2]
-  imageResized = imutils.resize(imageFull, width=int(imageWidth * imageScaleFactor))
+  imageSquare, debugFullImageFlag = genSquareImage(imageFull)
+  imageHeight, imageWidth = imageSquare.shape [:2]
+  width_scaled = int(imageWidth * imageScaleFactor)
+  height_scaled = int(imageHeight * imageScaleFactor)
+  imageResized = imutils.resize(imageSquare, width=int(imageWidth * imageScaleFactor))
   cv2.imwrite(imageTempFileName, imageResized)
 
   # if 'chars' class only, then crop the plate image, and overwrite the image, image width, and image height
@@ -141,17 +165,20 @@ def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
         plateYMin = int(obj['bndbox']['ymin'])
         plateXMax = int(obj['bndbox']['xmax'])
         plateYMax = int(obj['bndbox']['ymax'])
-        plateImage = imageResized[plateYMin: plateYMax,
+        plateImage = imageSquare[plateYMin: plateYMax,
                      plateXMin: plateXMax,...]
+        plateImage, debugFlag = genSquareImage(plateImage)
         cv2.imwrite(imageTempFileName, plateImage)
         imageHeight, imageWidth = plateImage.shape[:2]
+        width_scaled = int(imageWidth)
+        height_scaled = int(imageHeight)
         plateFound = True
         continue
     if plateFound == False:
       print("[ERROR] No plate box found in \"{}\"".format(image_path))
       quit()
 
-  if view_mode == True:
+  if view_mode == True or debugFlag == True:
     cvImage = cv2.imread(imageTempFileName)
   with tf.gfile.GFile(imageTempFileName, 'rb') as fid:
     encoded_jpg = fid.read()
@@ -161,11 +188,7 @@ def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
     raise ValueError('Image format not JPEG')
   key = hashlib.sha256(encoded_jpg).hexdigest()
 
-  # get the image dims and scale by imageScaleFactor
-  width_original = imageWidth
-  height_original = imageHeight
-  width_scaled = int(width_original * imageScaleFactor)
-  height_scaled = int(height_original * imageScaleFactor)
+
 
   xmins = []
   ymins = []
@@ -197,16 +220,16 @@ def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
     else:
       xmin, ymin, xmax, ymax = (int(obj['bndbox']['xmin']), int(obj['bndbox']['ymin']),
                                 int(obj['bndbox']['xmax']), int(obj['bndbox']['ymax']))
-    xmins.append(float(xmin) / width_original)
-    ymins.append(float(ymin) / height_original)
-    xmaxs.append(float(xmax) / width_original)
-    ymaxs.append(float(ymax) / height_original)
+    xmins.append(float(xmin) / imageWidth)
+    ymins.append(float(ymin) / imageHeight)
+    xmaxs.append(float(xmax) / imageWidth)
+    ymaxs.append(float(ymax) / imageHeight)
     classes_text.append(obj['name'].encode('utf8'))
     classes.append(label_map_dict[obj['name']])
     truncated.append(int(obj['truncated']))
     poses.append(obj['pose'].encode('utf8'))
 
-    if view_mode == True:
+    if view_mode == True or debugFlag == True:
       # denormalize the bounding box coordinates, and add bbox rect to image
       startX = int(xmins[-1] * width_scaled)
       startY = int(ymins[-1] * height_scaled)
@@ -225,7 +248,7 @@ def processImage(classSelect, view_mode, imageScaleFactor, dataObjects,
       cv2.rectangle(cvImage, (startX, startY), (endX, endY),
                     color, 1)
 
-  if view_mode == True:
+  if view_mode == True or debugFlag == True:
     # show the output image
     cv2.imshow("Image", cvImage)
     cv2.imwrite("myImage.jpg",cvImage)

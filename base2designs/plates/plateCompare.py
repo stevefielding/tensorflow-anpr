@@ -11,23 +11,26 @@ class PlateCompare():
     self.cum_charCnt_pred = 0
 
   # generate some stats for the images analysed
-  # platesWithCharCorrect - Plates detected in correct location and containing correct characters in the correct locations
-  # platesCorrect - Plates in correct location, but no checking of characters
-  # platesIncorrect - Plates detected outside of correct location. Calculated as a percentage, but bear in mind that
-  #                   the plates outside the correct location is unbounded, so plateCorrect+platesIncorrect may not add
-  #                   up to 100%
-  # charsCorrect - Characters detected in the correct place with the correct contents
-  # charsIncorrect - Chars detected outside of the correct location, or the location is correct,
-  #                  but the contents are wrong. Calculated as a percentage, but bear in mind that
-  #                  the number of characters outside the correct location is unbounded, so charsCorrect+charsIncorrect
-  #                  may not add up to 100%
+  # platesWithCharCorrect_recall - Plates detected in correct location and containing correct characters in the correct locations
+  #                               divided by the number of ground truth plates
+  # platesWithCharCorrect_precision - Plates detected in correct location and containing correct characters in the correct locations
+  #                                  divided by the total number of plates predicted (ie true pos plus false pos)
+  # plateFrames_recall - Plate frames in correct location (no checking of characters) divided by the
+  #                     number of ground truth plates
+  # plateFrames_precision - Plate frames in correct location (no checking of characters) divided by the
+  #                        the total number of plates predicted (ie true pos plus false pos)
+  # chars_recall - Characters detected in the correct place with the correct contents
+  #               divided by the number of ground truth characters
+  # chars_precision - Chars detected outside of the correct location, or the location is correct,
+  #                  but the contents are wrong. Divided by the total number of plates predicted (ie true pos plus false pos)
   def calcStats(self):
-    platesWithCharCorrect = self.cum_plateWithCharMatchCnt / self.cum_plateCnt_gt
-    platesCorrect = self.cum_plateFrameMatchCnt / self.cum_plateCnt_gt
-    platesIncorrect = (self.cum_plateCnt_pred - self.cum_plateFrameMatchCnt) / self.cum_plateCnt_gt
-    charsCorrect = self.cum_charMatchCnt / self.cum_charCnt_gt
-    charsIncorrect = (self.cum_charCnt_pred - self.cum_charMatchCnt) / self.cum_charCnt_gt
-    return platesWithCharCorrect, platesCorrect, platesIncorrect, charsCorrect, charsIncorrect
+    platesWithCharCorrect_recall = self.cum_plateWithCharMatchCnt / self.cum_plateCnt_gt
+    platesWithCharCorrect_precision = self.cum_plateWithCharMatchCnt / self.cum_plateCnt_pred
+    plateFrames_recall = self.cum_plateFrameMatchCnt / self.cum_plateCnt_gt
+    plateFrames_precision = self.cum_plateFrameMatchCnt / self.cum_plateCnt_pred
+    chars_recall = self.cum_charMatchCnt / self.cum_charCnt_gt
+    chars_precision = self.cum_charMatchCnt / self.cum_charCnt_pred
+    return platesWithCharCorrect_recall, platesWithCharCorrect_precision, plateFrames_recall, plateFrames_precision, chars_recall, chars_precision
 
   # calculate the intersection over union of two boxes
   def intersectionOverUnion(self, box1, box2):
@@ -85,7 +88,11 @@ class PlateCompare():
     charMatchCntTotal = 0
 
     # loop over all the matching plate boxes found in the previous code block
+    if len(plateBoxes_pred) != len(charBoxes_pred):
+      print("mismatch")
     for (i,j) in matchIndices:
+      #if j >= len(charBoxes_pred):
+      #  continue
       # set mask to all true
       maskChar_pred = np.ones(len(charBoxes_pred[j]), dtype=bool)
 
