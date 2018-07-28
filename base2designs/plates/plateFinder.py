@@ -3,7 +3,7 @@ import numpy as np
 
 class PlateFinder:
 
-  def __init__(self, minConfidence, charIOUMax=0.3, charPlateIOAMin=0.5, rejectPlates=False, minScore=0.6, minChars=2):
+  def __init__(self, minConfidence, categoryIdx, charIOUMax=0.3, charPlateIOAMin=0.5, rejectPlates=False, minScore=0.6, minChars=2):
     # boxes below minConfidence are rejected
     self.minConfidence = minConfidence
     # character boxes that do not overlap plate box by at least 'charPlateIOAMin' are rejected
@@ -15,6 +15,7 @@ class PlateFinder:
     self.rejectPlates = rejectPlates
     self.minScore = minScore
     self.minChars = minChars
+    self.categoryIdx = categoryIdx
 
   # calculate the intersection over union of two boxes
   def intersectionOverUnion(self, box1, box2):
@@ -152,7 +153,7 @@ class PlateFinder:
 
 
   # Find plate boxes and the text associated with each plate
-  def findPlates(self, boxes, scores, labels, categoryIdx):
+  def findPlates(self, boxes, scores, labels):
     licensePlateFound = False
     # set mask to all true
     mask = np.ones(len(scores), dtype=bool)
@@ -164,7 +165,7 @@ class PlateFinder:
       if score < self.minConfidence:
         mask[i] = False
         continue
-      label = categoryIdx[label]
+      label = self.categoryIdx[label]
       label = "{}".format(label["name"])
       # if label is plate, then append box to plateBoxes list and discard from original lists
       if label == "plate":
@@ -189,7 +190,7 @@ class PlateFinder:
       for (charBox, score, label) in zip(boxes, scores, labels):
         ioa = self.intersectionOverArea(charBox, plateBox)
         if ioa > 0.5:
-          label = categoryIdx[label]
+          label = self.categoryIdx[label]
           label = "{}".format(label["name"])
           char = [charBox[1], charBox, label, score]
           chars.append(char)
@@ -209,7 +210,7 @@ class PlateFinder:
 
   # Find only plates, and ignore chars
   # return the plateBoxes and plateScores
-  def findPlatesOnly(self, boxes, scores, labels, categoryIdx):
+  def findPlatesOnly(self, boxes, scores, labels):
     licensePlateFound = False
 
     # Discard all boxes below min score, and move plate boxes to separate list
@@ -219,7 +220,7 @@ class PlateFinder:
     for (i, (box, score, label)) in enumerate(zip(boxes, scores, labels)):
       if score < self.minConfidence:
         continue
-      label = categoryIdx[label]
+      label = self.categoryIdx[label]
       label = "{}".format(label["name"])
       # if label is plate, then append data to new lists
       if label == "plate":
@@ -304,3 +305,30 @@ class PlateFinder:
             .format(len(plateBoxes), len(plates), len(plateBoxes), len(charTexts)))
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes
+
+  def findCharsOnly(self, boxes, scores, labels, pbHeight, pbWidth, pbStartX, pbStartY, fullImageHeight, fullImageWidth):
+    # loop over the boxes, scores and labels
+    # Remove the plate boxes and
+    # with the remaining char boxes, build a 'chars' list
+    # chars entries contain (charBox left co-ordinate, all  4 charBox co-ordinates relative to original image, label, score)
+    # Order chars from left to right
+    chars = []
+    for (charBox, score, label) in zip(boxes, scores, labels):
+      if score < self.minConfidence:
+        continue
+      label = self.categoryIdx[label]
+      label = "{}".format(label["name"])
+      if label == "plate":
+        continue
+      # prediction returns a charBox relative to the cropped plateImage
+      # convert co-ordinates from fractional to pixels, add the plate box offset
+      # and then convert back to fractional
+      charBox = ((charBox[0] * pbHeight + pbStartY) / fullImageHeight,
+                 (charBox[1] * pbWidth + pbStartX) / fullImageWidth,
+                 (charBox[2] * pbHeight + pbStartY) / fullImageHeight,
+                 (charBox[3] * pbWidth + pbStartX) / fullImageWidth)
+      char = [charBox[1], charBox, label, score]
+      chars.append(char)
+    # sort the remaining chars by horizontal location
+    chars = sorted(chars, key=lambda x: x[0])
+    return chars

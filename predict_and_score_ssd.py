@@ -9,16 +9,6 @@
 # Predicted labels and bounding boxes are compared to the ground truths, and the
 # labelled image is optionally displayed.
 # Scores are displayed for plates and chars.
-# platesWithCharCorrect - Plates detected in correct location and containing correct characters in the correct locations
-# platesCorrect - Plates in correct location, but no checking of characters
-# platesIncorrect - Plates detected outside of correct location. Calculated as a percentage, but bear in mind that
-#                   the plates outside the correct location is unbounded, so plateCorrect+platesIncorrect may not add
-#                   up to 100%
-# charsCorrect - Characters detected in the correct place with the correct contents
-# charsIncorrect - Chars detected outside of the correct location, or the location is correct,
-#                  but the contents are wrong. Calculated as a percentage, but bear in mind that
-#                  the number of characters outside the correct location is unbounded, so charsCorrect+charsIncorrect
-#                  may not add up to 100%
 
 # import the necessary packages
 import argparse
@@ -32,6 +22,7 @@ from base2designs.plates.plateFinder import PlateFinder
 from base2designs.plates.plateXmlExtract import PlateXmlExtract
 from base2designs.plates.plateDisplay import PlateDisplay
 from base2designs.plates.plateCompare import PlateCompare
+from base2designs.plates.predicter import Predicter
 import time
 
 def genSquareImage(image):
@@ -153,7 +144,7 @@ categories = label_map_util.convert_label_map_to_categories(
 categoryIdx = label_map_util.create_category_index(categories)
 
 # create a plateFinder
-plateFinder = PlateFinder(args["min_confidence"], rejectPlates=True)
+plateFinder = PlateFinder(args["min_confidence"], categoryIdx, rejectPlates=True)
 
 # create a plate xml extractor
 plateXmlExtract = PlateXmlExtract(args["labels"])
@@ -169,8 +160,8 @@ with model.as_default():
   with tf.Session(graph=model) as sess:
     # grab a reference to the input image tensor and the boxes
     # tensor
-    imageTensor = model.get_tensor_by_name("image_tensor:0")
-    boxesTensor = model.get_tensor_by_name("detection_boxes:0")
+    predicter = Predicter(model, sess, categoryIdx)
+
 
     # get the list of verified xml files
     xmlFileCnt, xmlFiles = plateXmlExtract.getXmlVerifiedFileList(args["annotations_dir"])
@@ -182,27 +173,12 @@ with model.as_default():
       frameCnt += 1
       # grab the image, and get the ground truth boxes and labels
       image, boxes, labels = plateXmlExtract.getXmlData(xmlFile)
-      # get the image shape
-      (H, W) = image.shape[:2]
-
-      # check to see if we should resize along the width
-      #if W > H and W > 1500:
-      #  image = imutils.resize(image, width=1500)
-
-      # otherwise, check to see if we should resize along the
-      # height
-      #elif H > W and H > 1500:
-      #  image = imutils.resize(image, height=1500)
 
       # make 2 copies of the image, one for ground truth labelling and the other for prediction labelling
-      image, hScale, wScale = genSquareImage(image)
+      image, hScale, wScale = predicter.genSquareImage(image)
+      fullImageHeight, fullImageWidth = image.shape[:2]
       image_gt = image.copy()
       imagePreds = image.copy()
-
-      # prepare the image for inference input
-      (H, W) = image.shape[:2]
-      image = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
-      image = np.expand_dims(image, axis=0)
 
       # find the ground truth plates and display
       licensePlateFound_gt, plateBoxes_gt, charTexts_gt, charBoxes_gt = plateFinder.findGroundTruthPlates(boxes, labels, scale=True, hScale=hScale, wScale=wScale)
@@ -210,39 +186,24 @@ with model.as_default():
         imageLabelled = plateDisplay.labelImage(image_gt, plateBoxes_gt, charBoxes_gt, charTexts_gt)
         cv2.imshow("Ground truth plates", imageLabelled)
 
-      # for each bounding box we would like to know the score
-      # (i.e., probability) and class label
-      scoresTensor = model.get_tensor_by_name("detection_scores:0")
-      classesTensor = model.get_tensor_by_name("detection_classes:0")
-      numDetections = model.get_tensor_by_name("num_detections:0")
 
-      # perform inference and compute the bounding boxes,
-      # probabilities, and class labels
-      (boxes, scores, labels, N) = sess.run(
-        [boxesTensor, scoresTensor, classesTensor, numDetections],
-        feed_dict={imageTensor: image})
-
-      # squeeze the lists into a single dimension
-      boxes = np.squeeze(boxes)
-      scores = np.squeeze(scores)
-      labels = np.squeeze(labels)
-
-      # Find all the plate boxes
-      licensePlateFound_pred, plateBoxes_pred, plateScores_pred = plateFinder.findPlatesOnly(boxes, scores, labels, categoryIdx)
+      # Perform inference on the full image, and then select only the plate boxes
+      boxes, scores, labels = predicter.predictPlates(imagePreds)
+      licensePlateFound_pred, plateBoxes_pred, plateScores_pred = plateFinder.findPlatesOnly(boxes, scores, labels)
 
       # loop over the plate boxes, find the chars inside the plate boxes,
       # and then scrub the chars with 'processPlates', resulting in a list of final plateBoxes, char texts, char boxes, char scores and complete plate scores
       plates = []
       for plateBox in plateBoxes_pred:
-        chars = predictChars(imagePreds, plateBox, categoryIdx, args["min_confidence"])
+        boxes, scores, labels, pbHeight, pbWidth, pbStartX, pbStartY = predicter.predictChars(imagePreds, plateBox, args["min_confidence"])
+        chars = plateFinder.findCharsOnly(boxes, scores, labels, pbHeight, pbWidth, pbStartX, pbStartY, fullImageHeight, fullImageWidth)
         if len(chars) > 0:
           plates.append(chars)
         else:
           plates.append(None)
       plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateCompleteScores_pred = plateFinder.processPlates(plates, plateBoxes_pred, plateScores_pred)
-      #for charText_pred in charTexts_pred:
-      #  print("[INFO] Found plate: {}".format(charText_pred))
 
+      # Display the full image with predicted plates and chars
       if args["image_display"] == True:
         imageLabelled = plateDisplay.labelImage(imagePreds, plateBoxes_pred, charBoxes_pred, charTexts_pred)
         cv2.imshow("Predicted plates", imageLabelled)
