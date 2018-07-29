@@ -120,7 +120,7 @@ with model.as_default():
           plates.append(chars)
         else:
           plates.append(None)
-      plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateCompleteScores_pred = plateFinder.processPlates(plates, plateBoxes_pred, plateScores_pred)
+      plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateAverageScores_pred = plateFinder.processPlates(plates, plateBoxes_pred, plateScores_pred)
 
       # Display the full image with predicted plates and chars
       if args["image_display"] == True:

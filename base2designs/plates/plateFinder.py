@@ -121,12 +121,12 @@ class PlateFinder:
     # Calculate the average score per plate.
     # Generate mask to reject plates with; low number of chars, plates on the edge of the frame
     # and plates with a low average score.
-    plateCompleteScores = []
+    plateAverageScores = []
     mask = np.ones(len(plateScores), dtype=bool)
     for (i, (plateBox, plateScore, chScores)) in enumerate(zip(plateBoxes, plateScores, charScores)):
-      # Calc the average score for plate plus characters inside the plate, and save to plateCompleteScores
+      # Calc the average score for plate plus characters inside the plate, and save to plateAverageScores
       averageScore = (plateScore + sum(chScores)) / (len(chScores) + 1)
-      plateCompleteScores.append(averageScore)
+      plateAverageScores.append(averageScore)
       # set mask to reject bad plates
       if averageScore < self.minScore or len(chScores) <= self.minChars or max(plateBox) >= 0.998 or min(plateBox) <= 0.002:
         mask[i] = False
@@ -134,23 +134,22 @@ class PlateFinder:
     # optionally remove bad plates
     if self.rejectPlates == True:
       # update the lists to remove discarded plates
-      plateCompleteScores = list(np.array(plateCompleteScores)[mask,...])
+      plateAverageScores = list(np.array(plateAverageScores)[mask,...])
       plateBoxes = list(np.array(plateBoxes)[mask,...])
       charScores = list(np.array(charScores)[mask,...])
       charTexts = list(np.array(charTexts,object)[mask,...])
       charBoxes = list(np.array(charBoxes)[mask,...])
 
-    if (len(plateBoxes) != len(plateCompleteScores) or len(plateBoxes) != len(charTexts)):
-      print("[ERROR]: len(platesBoxes):{} != len(plateCompleteScores):{} or len(platesBoxes):{} != len(charTexts):{}"
-            .format(len(plateBoxes), len(plateCompleteScores), len(plateBoxes), len(charTexts)))
+    if (len(plateBoxes) != len(plateAverageScores) or len(plateBoxes) != len(charTexts)):
+      print("[ERROR]: len(platesBoxes):{} != len(plateAverageScores):{} or len(platesBoxes):{} != len(charTexts):{}"
+            .format(len(plateBoxes), len(plateAverageScores), len(plateBoxes), len(charTexts)))
     if (len(plateBoxes) != len(charBoxes)):
       print("[ERROR]: len(platesBoxes):{} != len(charBoxes):{}"
             .format(len(plateBoxes), len(charBoxes)))
-    if licensePlateFound == True and len(plateCompleteScores) == 0:
+    if licensePlateFound == True and len(plateAverageScores) == 0:
       print("[INFO] license plate found but now rejected")
 
-    return plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores
-
+    return plateBoxes, charTexts, charBoxes, charScores, plateAverageScores
 
   # Find plate boxes and the text associated with each plate
   def findPlates(self, boxes, scores, labels):
@@ -201,12 +200,9 @@ class PlateFinder:
       else:
         plates.append(None)
 
-    plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores = self.processPlates(plates, plateBoxes, plateScores)
+    plateBoxes, charTexts, charBoxes, charScores, plateAverageScores = self.processPlates(plates, plateBoxes, plateScores)
 
-    return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateCompleteScores
-
-
-
+    return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateAverageScores
 
   # Find only plates, and ignore chars
   # return the plateBoxes and plateScores
