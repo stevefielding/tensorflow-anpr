@@ -230,18 +230,8 @@ class PlateFinder:
 
     return licensePlateFound, plateBoxes, plateScores
 
-  def scaleBoxes(self, boxes, hScale, wScale):
-    boxes_scaled = []
-    for box in boxes:
-      box_scaled = (box[0] / hScale,
-                    box[1] / wScale,
-                    box[2] / hScale,
-                    box[3] / wScale)
-      boxes_scaled.append(np.array(box_scaled))
-    return boxes_scaled
-
   # Find ground truth plate boxes and the text associated with each plate
-  def findGroundTruthPlates(self, boxes, labels, scale=False, hScale=1.0, wScale=1.0):
+  def findGroundTruthPlates(self, boxes, labels):
     labels = [x.decode("ASCII") for x in labels]
     labels = np.array(labels)
     licensePlateFound = False
@@ -292,21 +282,13 @@ class PlateFinder:
         charTexts.append([])
         charBoxes.append([])
 
-    # Adjust the plate box gt co-ordinates to account for the padding performed on the image used for prediction
-    if scale == True:
-      plateBoxes = self.scaleBoxes(plateBoxes, hScale, wScale)
-      chBoxes_scaled = []
-      for chBoxes in charBoxes:
-        chBoxes_scaled.append(self.scaleBoxes(chBoxes, hScale, wScale))
-      charBoxes = chBoxes_scaled
-
     if (len(plateBoxes) != len(plates) or len(plateBoxes) != len(charTexts)):
       print("[ERROR]: len(platesBoxes):{} !plates= len(plates):{} or len(platesBoxes):{} != len(charText):{}"
             .format(len(plateBoxes), len(plates), len(plateBoxes), len(charTexts)))
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes
 
-  def findCharsOnly(self, boxes, scores, labels, pbHeight, pbWidth, pbStartX, pbStartY, fullImageHeight, fullImageWidth):
+  def findCharsOnly(self, boxes, scores, labels, plateBox, fullImageHeight, fullImageWidth):
     # loop over the boxes, scores and labels
     # Remove the plate boxes and
     # with the remaining char boxes, build a 'chars' list
@@ -323,6 +305,12 @@ class PlateFinder:
       # prediction returns a charBox relative to the cropped plateImage
       # convert co-ordinates from fractional to pixels, add the plate box offset
       # and then convert back to fractional
+      (pbStartY, pbStartX, pbEndY, pbEndX) = (int(plateBox[0] * fullImageHeight),
+                                              int(plateBox[1] * fullImageWidth),
+                                              int(plateBox[2] * fullImageHeight),
+                                              int(plateBox[3] * fullImageWidth))
+      pbHeight = pbEndY - pbStartY
+      pbWidth = pbEndX - pbStartX
       charBox = ((charBox[0] * pbHeight + pbStartY) / fullImageHeight,
                  (charBox[1] * pbWidth + pbStartX) / fullImageWidth,
                  (charBox[2] * pbHeight + pbStartY) / fullImageHeight,

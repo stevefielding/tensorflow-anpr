@@ -13,6 +13,16 @@ class Predicter():
     self.classesTensor = model.get_tensor_by_name("detection_classes:0")
     self.numDetections = model.get_tensor_by_name("num_detections:0")
 
+  def scaleBoxes(self, boxes, hScale, wScale):
+    boxes_scaled = []
+    for box in boxes:
+      box_scaled = (box[0] * hScale,
+                    box[1] * wScale,
+                    box[2] * hScale,
+                    box[3] * wScale)
+      boxes_scaled.append(np.array(box_scaled))
+    return boxes_scaled
+
   def genSquareImage(self,image):
     # separate the channels
     blue = image[..., 0]
@@ -51,7 +61,6 @@ class Predicter():
                                             int(plateBox[3] * W))
     plateImage = image[pbStartY: pbEndY, pbStartX: pbEndX, ...]
     plateImage, hScale, wScale = self.genSquareImage(plateImage)
-    pbHeight, pbWidth = plateImage.shape[:2]
     if image_display == True:
       cv2.imshow("Plate Image", plateImage)
       cv2.waitKey(0)
@@ -66,9 +75,14 @@ class Predicter():
     scores = np.squeeze(scores)
     labels = np.squeeze(labels)
 
-    return boxes, scores, labels, pbHeight, pbWidth, pbStartX, pbStartY
+    # Adjust the box co-ordinates to account for the padding performed to square the image
+    boxes = self.scaleBoxes(boxes, hScale, wScale)
+
+    return boxes, scores, labels
 
   def predictPlates(self, image):
+
+    image, hScale, wScale = self.genSquareImage(image)
 
     # prepare the image for inference input
     image_tf = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
@@ -84,5 +98,8 @@ class Predicter():
     boxes = np.squeeze(boxes)
     scores = np.squeeze(scores)
     labels = np.squeeze(labels)
+
+    # Adjust the box co-ordinates to account for the padding performed to square the image
+    boxes = self.scaleBoxes(boxes, hScale, wScale)
 
     return boxes, scores, labels
