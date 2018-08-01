@@ -15,7 +15,7 @@
   "display_video_enable": "false", # enable display of input video
   "removeOverlay": "false", # remove Sunba overlay text. Overlay can be disabled in Sunba config, so set to false
   "saveAnnotatedImage": "false", # output files from detect.py can optionally be annotated with LP bounding box and LP chars
-  "saveAnnotatedVideo": "false", # output an annotated video
+  "saveAnnotatedVideo": "true", # output an annotated video
   "imageDebugEnable": "false", # print images from intermediate stages of the image processing pipeline
   "move_video_file": "false", # move video file to new location after finished processing
 
