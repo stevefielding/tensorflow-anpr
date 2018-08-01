@@ -175,39 +175,32 @@ the output of images with duplicate plates.
 ````
 python predict_video.py --conf conf/lplates_smallset.json
 ````
-
-##### predict_and_score_faster_rcnn.py
-Test a trained model against an annotated dataset. Annotations must be in PASCAL VOC style xml files
-Run with image_display true if you wish to see each annotated image displayed.
-````
-python predict_and_score_faster_rcnn.py \
---model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
---labels datasets/records/classes.pbtxt \
---annotations_dir images/C920_images \
---num-classes 37 \
---image_display false
-````
-Your results should look something like this:
-````
-[INFO] platesWithCharCorrect: 91%, platesCorrect: 99%, platesIncorrect: 0%, charsCorrect: 98%, charsIncorrect: 1%
-[INFO] Processed 723 xml annotation files
-````
-platesWithCharCorrect: plates where the plate box, char boxes and char text all match  
-platesCorrect: plate boxes that match with iou > 0.5  
-charsCorrect: chars where char box and char text match 
  
-##### predict_and_score_ssd.py
+##### predict_and_score.py
 Test a trained model against an annotated dataset. Annotations must be in PASCAL VOC style xml files
 Run with image_display true if you wish to see each annotated image displayed.
-Expects two types of image/annotation pairs; full images with associated plate annotation, and 
-cropped plate images with associated character annotations.
+Can be executed with single or two prediction stages.  
+pred_stages = 1:
+plates and characters are predicted in a single pass
 ````
-python predict_and_score_ssd.py \
---model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
 --labels datasets/records/classes.pbtxt \
---annotations_dir images/C920_images \
+--annotations_dir images_verification \
 --num-classes 37 \
---min-confidence 0.1
+--min-confidence 0.5 \
+--pred_stages 1
+````
+pred_stages = 2:  
+The first prediction stage predicts plates, crops from the predicted plate from the image, and then 
+the cropped plate image is used as input to the second prediction stage, which predicts characters. 
+````
+python predict_and_score.py --model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+--labels datasets/records/classes.pbtxt \
+--annotations_dir images_verification \
+--num-classes 37 \
+--min-confidence 0.1 \
+--pred_stages 2
+Single stage faster R-CNN usage
 ````
 Your results should look something like this:
 ````

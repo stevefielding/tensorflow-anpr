@@ -39,7 +39,7 @@ class Predicter():
     dimMax = max(image.shape[0], image.shape[1])
     hScale = dimMax / image.shape[0]
     wScale = dimMax / image.shape[1]
-    imageOut = np.empty((dimMax, dimMax, 3), dtype=np.uint8)
+    imageOut = np.zeros((dimMax, dimMax, 3), dtype=np.uint8)
     imageOut[..., 0] = np.uint8(blueAv)
     imageOut[..., 1] = np.uint8(greenAv)
     imageOut[..., 2] = np.uint8(redAv)
@@ -52,7 +52,7 @@ class Predicter():
 
     return imageOut, hScale, wScale
 
-  def predictChars(self, image, plateBox, minConfidence, image_display=False):
+  def predictChars(self, image, plateBox, image_display=False):
     # crop plate from the image, and predict chars
     H, W = image.shape[:2]
     (pbStartY, pbStartX, pbEndY, pbEndX) = (int(plateBox[0] * H),
@@ -80,9 +80,10 @@ class Predicter():
 
     return boxes, scores, labels
 
-  def predictPlates(self, image):
+  def predictPlates(self, image, preprocess=True):
 
-    image, hScale, wScale = self.genSquareImage(image)
+    if preprocess == True:
+      image, hScale, wScale = self.genSquareImage(image)
 
     # prepare the image for inference input
     image_tf = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
@@ -100,6 +101,7 @@ class Predicter():
     labels = np.squeeze(labels)
 
     # Adjust the box co-ordinates to account for the padding performed to square the image
-    boxes = self.scaleBoxes(boxes, hScale, wScale)
+    if preprocess == True:
+      boxes = self.scaleBoxes(boxes, hScale, wScale)
 
     return boxes, scores, labels

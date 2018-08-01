@@ -1,11 +1,23 @@
 # USAGE
-# python predict_and_score_ssd.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \
-# --labels datasets/records/classes.pbtxt --annotations_dir images/C920_images/2018_06_14_ann --num-classes 37
+# Two stage SSD usage
+# python predict_and_score.py --model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+# --labels datasets/records/classes.pbtxt \
+# --annotations_dir images_verification \
+# --num-classes 37 \
+# --min-confidence 0.1 \
+# --pred_stages 2
+# Single stage faster R-CNN usage
+# python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
+# --labels datasets/records/classes.pbtxt \
+# --annotations_dir images_verification \
+# --num-classes 37 \
+# --min-confidence 0.5 \
+# --pred_stages 1
 # Use boolean flag --image_display if you wish to see the annotated images
 # Scans the annotations_dir and looks for PASCAL_VOC annotations with verified=yes, reads all the associated image
 # files, and performs inference. Predicted results are filtered by plateFinder, which discards char boxes that are
-# outside a platebox, discards char boxes that overlap each other, and then orders the chars within each plate box
-# from left to right.
+# outside a platebox (if pred_stages = 1), discards char boxes that overlap each other,
+# and then orders the chars within each plate box from left to right.
 # Predicted labels and bounding boxes are compared to the ground truths, and the
 # labelled image is optionally displayed.
 # Scores are displayed for plates and chars.
@@ -25,7 +37,6 @@ from base2designs.plates.plateCompare import PlateCompare
 from base2designs.plates.predicter import Predicter
 import time
 
-
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-m", "--model", required=True,
@@ -40,9 +51,10 @@ ap.add_argument("-c", "--min-confidence", type=float, default=0.5,
   help="minimum probability used to filter weak detections")
 ap.add_argument("-d", "--image_display", type=bool, default=False,
   help="Enable display of ground truth and predicted annotated images")
+ap.add_argument("-p", "--pred_stages", type=int, required=True,
+  help="number of prediction stages")
 
 args = vars(ap.parse_args())
-
 
 # initialize the model
 model = tf.Graph()
@@ -106,21 +118,33 @@ with model.as_default():
         imageLabelled = plateDisplay.labelImage(image_gt, plateBoxes_gt, charBoxes_gt, charTexts_gt)
         cv2.imshow("Ground truth plates", imageLabelled)
 
-      # Perform inference on the full image, and then select only the plate boxes
-      boxes, scores, labels = predicter.predictPlates(image_pred)
-      licensePlateFound_pred, plateBoxes_pred, plateScores_pred = plateFinder.findPlatesOnly(boxes, scores, labels)
+      # If prediction stages == 2, then perform prediction on full image, find the plates, crop the plates from the image,
+      # and then perform prediction on the plate images
+      if args["pred_stages"] == 2:
+        # Perform inference on the full image, and then select only the plate boxes
+        boxes, scores, labels = predicter.predictPlates(image_pred, preprocess=True)
+        licensePlateFound_pred, plateBoxes_pred, plateScores_pred = plateFinder.findPlatesOnly(boxes, scores, labels)
+        # loop over the plate boxes, find the chars inside the plate boxes,
+        # and then scrub the chars with 'processPlates', resulting in a list of final plateBoxes, char texts, char boxes, char scores and complete plate scores
+        plates = []
+        for plateBox in plateBoxes_pred:
+          boxes, scores, labels = predicter.predictChars(image_pred, plateBox)
+          chars = plateFinder.findCharsOnly(boxes, scores, labels, plateBox, image_pred.shape[0], image_pred.shape[1])
+          if len(chars) > 0:
+            plates.append(chars)
+          else:
+            plates.append(None)
+        plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateAverageScores_pred = plateFinder.processPlates(plates, plateBoxes_pred, plateScores_pred)
 
-      # loop over the plate boxes, find the chars inside the plate boxes,
-      # and then scrub the chars with 'processPlates', resulting in a list of final plateBoxes, char texts, char boxes, char scores and complete plate scores
-      plates = []
-      for plateBox in plateBoxes_pred:
-        boxes, scores, labels = predicter.predictChars(image_pred, plateBox, args["min_confidence"])
-        chars = plateFinder.findCharsOnly(boxes, scores, labels, plateBox, image_pred.shape[0], image_pred.shape[1])
-        if len(chars) > 0:
-          plates.append(chars)
-        else:
-          plates.append(None)
-      plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateAverageScores_pred = plateFinder.processPlates(plates, plateBoxes_pred, plateScores_pred)
+      # If prediction stages == 1, then predict the plates and characters in one pass
+      elif args["pred_stages"] == 1:
+        # Perform inference on the full image, and then find the plate text associated with each plate
+        boxes, scores, labels = predicter.predictPlates(image_pred, preprocess=False)
+        licensePlateFound_pred, plateBoxes_pred, charTexts_pred, charBoxes_pred, charScores_pred, plateScores_pred = plateFinder.findPlates(
+          boxes, scores, labels)
+      else:
+        print("[ERROR] --pred_stages {}. The number of prediction stages must be either 1 or 2".format(args["pred_stages"]))
+        quit()
 
       # Display the full image with predicted plates and chars
       if args["image_display"] == True:
