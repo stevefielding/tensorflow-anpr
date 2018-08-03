@@ -1,12 +1,12 @@
 Automatic Number (License) Plate Recognition
 ============================================
 Detect vehicle license plates in videos and images using the tensorflow/object_detection API.  
-Train object detection models for license plate detection using TFOD API, and either a single detection stage
+Train object detection models for license plate detection using TFOD API, with either a single detection stage
 or a double detection stage.  
-The single stage detector, detects plates and plate characters in a single inference stage.
+The single stage detector, detects plates and plate characters in a single inference stage.  
 The double stage detector detects plates in the first inference stage, crops the detected plate from the image, 
-passes the cropped plate image to the second inference stage, and detects plate characters. All performed using a single detection model.   
-The double stage detector uses a single model that has been trained to detect plates in full images containing cars/plates, 
+passes the cropped plate image to the second inference stage, which detects plate characters.   
+The double stage detector uses a single detection model that has been trained to detect plates in full images containing cars/plates, 
 and trained to detect plate text in images containing tightly cropped plate images. 
 
 ##### mturk.html:
@@ -50,38 +50,39 @@ if it is not within a plate bounding box.
 ````
 python gen_plates.py --numImages 1000 --imagePath artificial_images/CA --xmlPath artificial_images/CA_ann
 ````
-##### build_anpr_records_faster_rcnn.py:
+
+##### build_tf_records.py:
 Reads a group of PASCAL VOC style xml annotation files, and combines with associated images 
 to build a TFrecord dataset. Requires a predefined label map file that maps labels to integers.  
 Will only use images where the corresponding annotation file has the verified field set to 'yes'.  
+label_split defines the top level label.  
+For example if label_split == 'plate', the original image is split into
+a full image and a cropped image of the license plate, and the original annotation is split into a plate annotation,
+and a character annotation. The images are padded to make them square, and the full image is scaled down to avoid
+problems with excessive memory usage during training.   
+If label_split == 'none', then all the images will be full size originals, and the annotations will contain labels
+for every object.
 ````
-python build_anpr_records_faster_rcnn.py \
---image_dir=images \
---record_dir=datasets/records \
---annotations_dir=images \
---label_map_file=datasets/records/classes.pbtxt \
---view_mode=False \
---test_record_file=testing_faster_rcnn.record \
---train_record_file=training_faster_rcnn.record
-````
-##### build_anpr_records_ssd.py:
-Reads a group of PASCAL VOC style xml annotation files, and combines with associated images 
-to build a TFrecord dataset. Requires a predefined label map file that maps labels to integers.  
-Will only use images where the corresponding annotation file has the verified field set to 'yes'.  
-Similar to build_anpr_records_faster_rcnn.py,except that it generates two pairs of image/annotations for
-every original image/annotation file pair. The original image is split into a full image and a cropped image
-of the license plate, and the original annotation is split into a plate annotation, and a character annotation. 
-The images are padded to make them square, and the full image is scaled down to avoid problems with excessive
-memory usage during training.
-````
-python build_anpr_records_ssd.py \
---record_dir=datasets/records \
---annotations_dir=images \
---label_map_file=datasets/records/classes.pbtxt \
---view_mode=False \
---image_scale_factor=0.4 \
---test_record_file=testing_scaled_mixed_allsquare.record \
---train_record_file=training_scaled_mixed_allsquare.record
+Example usage, with plate char split:
+    python build_tf_records.py \
+    --record_dir=datasets/records \
+    --annotations_dir=images \
+    --label_map_file=datasets/records/classes.pbtxt \
+    --view_mode=False \
+    --image_scale_factor=0.4 \
+    --test_record_file=testing_plate_char_split.record \
+    --train_record_file=training_plate_char_split.record
+    --split_label='plate'
+    
+Example usage, with no split:
+    python build_tf_records.py \
+    --record_dir=datasets/records \
+    --annotations_dir=images \
+    --label_map_file=datasets/records/classes.pbtxt \
+    --view_mode=False \
+    --test_record_file=testing_plate_char_combined.record \
+    --train_record_file=training_plate_char_combined.record \
+    --split_label=none
 ````
 ##### Directory layout
 It is important to spend some time figuring out the best directory layout.   
@@ -126,15 +127,14 @@ tensorflow_object_detection_datasets
 ````
 
 ##### Train the object_detection model
-Now you can use tensorflow/models/research/object_detection to train the model
+Now you can use the TFOD API, at tensorflow/models/research/object_detection, to train the model.
 It goes something like this. Assuming python virtualenv called tensorflow, 
 a single GPU for training and CPU for eval:
-
-cd tensorflow/models/research/object_detection
 
 ###### Training
 ````
 workon tensoflow  
+cd tensorflow/models/research/object_detection
 python train.py --logtostderr \  
 --pipeline_config_path ../anpr/experiment_faster_rcnn/2018_06_12/training/faster_rcnn_anpr.config \  
 --train_dir ../anpr/experiment_faster_rcnn/2018_06_12/training

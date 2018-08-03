@@ -13,7 +13,7 @@
 # --num-classes 37 \
 # --min-confidence 0.5 \
 # --pred_stages 1
-# Use boolean flag --image_display if you wish to see the annotated images
+# Use boolean arg "--image_display True" if you wish to see the annotated images.
 # Scans the annotations_dir and looks for PASCAL_VOC annotations with verified=yes, reads all the associated image
 # files, and performs inference. Predicted results are filtered by plateFinder, which discards char boxes that are
 # outside a platebox (if pred_stages = 1), discards char boxes that overlap each other,
@@ -37,6 +37,15 @@ from base2designs.plates.plateCompare import PlateCompare
 from base2designs.plates.predicter import Predicter
 import time
 
+
+def str2bool(v):
+  if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    return True
+  elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    return False
+  else:
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-m", "--model", required=True,
@@ -49,7 +58,7 @@ ap.add_argument("-n", "--num-classes", type=int, required=True,
   help="# of class labels")
 ap.add_argument("-c", "--min-confidence", type=float, default=0.5,
   help="minimum probability used to filter weak detections")
-ap.add_argument("-d", "--image_display", type=bool, default=False,
+ap.add_argument("-d", "--image_display", type=str2bool, default=False,
   help="Enable display of ground truth and predicted annotated images")
 ap.add_argument("-p", "--pred_stages", type=int, required=True,
   help="number of prediction stages")
