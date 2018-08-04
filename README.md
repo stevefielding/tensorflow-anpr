@@ -180,16 +180,9 @@ python predict.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_mo
 --labels datasets/records/classes.pbtxt --imagePath images/SJ7STAR_images/2018_05_27 \  
 --num-classes 37
 ````
-##### predict_video.py
-Test your exported model against a video dataset. Uses a single stage of prediction.
-Outputs an annotated video and a series of still images along with image annotations. The still images are grouped to reduce 
-the output of images with duplicate plates.
-The image annotations can be viewed and edited using labelImg, and then they can be used further enlarge the training dataset.
-````
-python predict_video.py --conf conf/lplates_smallset.json
-````
+
 ##### predict_video_ssd.py
-Test your exported model against a video dataset. Uses two stage prediction.
+Test your exported model against a video dataset. Uses one or two two stage prediction.
 Outputs an annotated video and a series of still images along with image annotations. The still images are grouped to reduce 
 the output of images with duplicate plates.
 The image annotations can be viewed and edited using labelImg, and then they can be used further enlarge the training dataset.

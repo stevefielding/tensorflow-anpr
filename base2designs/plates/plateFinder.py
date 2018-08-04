@@ -201,6 +201,8 @@ class PlateFinder:
         plates.append(None)
 
     plateBoxes, charTexts, charBoxes, charScores, plateAverageScores = self.processPlates(plates, plateBoxes, plateScores)
+    if len(plateBoxes) != 0:
+      licensePlateFound = True
 
     return licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateAverageScores
 

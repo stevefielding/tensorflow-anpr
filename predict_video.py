@@ -1,4 +1,3 @@
-
 # USAGE
 # $ python predict_video.py --conf conf/lplates_smallset.json
 
@@ -22,6 +21,7 @@ from base2designs.plates.plateHistory import PlateHistory
 from base2designs.utils.conf import Conf
 from base2designs.utils.folderControl import FolderControl
 from base2designs.utils.videoWriter import VideoWriter
+from base2designs.plates.predicter import Predicter
 
 # construct the argument parser and parse command line arguments
 ap = argparse.ArgumentParser()
@@ -36,21 +36,11 @@ if os.path.exists(args["conf"]) == False:
 # Read the json config
 conf = Conf(args["conf"])
 
-# initialize the colors list and the model
-#COLORS = [(0, 255, 0), (0, 0, 255)]
-COLORS = np.random.randint(0,256, size=37*3)
-COLORS = COLORS.reshape((37,3))
-#COLORS = [tuple(x) for x in COLORS]
-COLORS2 = []
-for oldTuple in COLORS:
-  newTuple = (int(oldTuple[0]), int(oldTuple[1]), int(oldTuple[2]))
-  COLORS2.append(newTuple)
-COLORS = COLORS2
+reject_poor_quality_plates=conf["reject_poor_quality_plates"]=="true"
+print("Detecting objects using model: {}, and {} stage(s) of prediction".format(conf["model"], conf["pred_stages"]))
+print("reject_poor_quality_plates: {}".format(reject_poor_quality_plates))
 
-# if the video frames are larger than this dimension they
-# will be resized, whilst retaining the same aspect ratio
-MAX_VID_DIM = 2000
-
+# initialize the model
 model = tf.Graph()
 
 # create a context manager that makes this model the default one for
@@ -82,7 +72,8 @@ else:
   logFile = open(logFilePath, "a")
 
 # create a plateFinder and load the plate history utility
-plateFinder = PlateFinder(conf["min_confidence"], rejectPlates=True, charIOUMax=conf["charIOUMax"])
+plateFinder = PlateFinder(conf["min_confidence"], categoryIdx,
+                          rejectPlates=reject_poor_quality_plates, charIOUMax=conf["charIOUMax"])
 folderController = FolderControl()
 plateHistory = PlateHistory(conf["output_image_path"], logFile,
                             saveAnnotatedImage=conf["saveAnnotatedImage"] == "true")
@@ -108,7 +99,7 @@ for videoPath in sorted(myPaths):
   else:
     destFolderRootName = "YYYY-MM-DD"
   folderController.createDestFolders(destFolderRootName, conf["save_video_path"],
-                                     conf["output_image_path"], conf["output_cropped_image_path"], conf["output_video_path"])
+                                     conf["output_image_path"], conf["output_video_path"])
 
   # create a session to perform inference
   with model.as_default():
@@ -120,6 +111,9 @@ for videoPath in sorted(myPaths):
       # Prepare findFrameWithPlate for a new video sequence
       plateLogFlag = False
       firstPlateFound = False
+
+      # create a predicter, used to predict plates and chars
+      predicter = Predicter(model, sess, categoryIdx)
 
       # loop over frames from the video file stream
       while True:
@@ -158,32 +152,8 @@ for videoPath in sorted(myPaths):
           plateLogFlag = True
           frameCntForPlateLog = 0
         if (frameDecCnt == 1):
-          grabbed, image = stream.retrieve()  # retrieve the already grabbed frame
-
-          # grab a reference to the input image tensor and the
-          # boxes
-          imageTensor = model.get_tensor_by_name("image_tensor:0")
-          boxesTensor = model.get_tensor_by_name("detection_boxes:0")
-
-          # for each bounding box we would like to know the score
-          # (i.e., probability) and class label
-          scoresTensor = model.get_tensor_by_name("detection_scores:0")
-          classesTensor = model.get_tensor_by_name("detection_classes:0")
-          numDetections = model.get_tensor_by_name("num_detections:0")
-
-          # grab the image dimensions
-          (H, W) = image.shape[:2]
-
-          # check to see if we should resize along the width
-          if W > H and W > MAX_VID_DIM:
-            image = imutils.resize(image, width=MAX_VID_DIM)
-
-          # otherwise, check to see if we should resize along the
-          # height
-          elif H > W and H > MAX_VID_DIM:
-            image = imutils.resize(image, height=MAX_VID_DIM)
-
-          # get the new dimensions for the resized image
+          # retrieve the already grabbed frame, and get the dimensions
+          grabbed, image = stream.retrieve()
           (H, W, D) = image.shape[:3]
 
           # if the video writer is None, initialize it
@@ -199,32 +169,49 @@ for videoPath in sorted(myPaths):
             # create a copy of image
             videoImage = image.copy()
 
-          # Convert image into format expected by tensorflow, ie RGB and extra dimension to represent the batch axis
-          tfImage = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2RGB)
-          tfImage = np.expand_dims(tfImage, axis=0)
+          # If prediction stages == 2, then perform prediction on full image, find the plates, crop the plates from the image,
+          # and then perform prediction on the plate images
+          if conf["pred_stages"] == 2:
+            # Perform inference on the full image, and then select only the plate boxes
+            boxes, scores, labels = predicter.predictPlates(image)
+            licensePlateFound, plateBoxes, plateScores = plateFinder.findPlatesOnly(boxes, scores, labels)
 
-          # perform inference and compute the bounding boxes,
-          # probabilities, and class labels
-          (boxes, scores, labels, N) = sess.run(
-            [boxesTensor, scoresTensor, classesTensor, numDetections],
-            feed_dict={imageTensor: tfImage})
+            # loop over the plate boxes, find the chars inside the plate boxes,
+            # and then scrub the chars with 'processPlates', resulting in a list of final plateBoxes, char texts, char boxes, char scores and complete plate scores
+            plates = []
+            for plateBox in plateBoxes:
+              boxes, scores, labels = predicter.predictChars(image, plateBox, conf["min_confidence"])
+              chars = plateFinder.findCharsOnly(boxes, scores, labels, plateBox, image.shape[0], image.shape[1])
+              if len(chars) > 0:
+                plates.append(chars)
+              else:
+                plates.append(None)
+            plateBoxes, charTexts, charBoxes, charScores, plateAverageScores = plateFinder.processPlates(
+              plates, plateBoxes, plateScores)
+            if len(plateAverageScores) == 0:
+              licensePlateFound = False
+            else:
+              licensePlateFound = True
 
-          # squeeze the lists into a single dimension
-          boxes = np.squeeze(boxes)
-          scores = np.squeeze(scores)
-          labels = np.squeeze(labels)
+          # If prediction stages == 1, then predict the plates and characters in one pass
+          elif conf["pred_stages"] == 1:
+            # Perform inference on the full image, and then find the plate text associated with each plate
+            boxes, scores, labels = predicter.predictPlates(image, preprocess=False)
+            licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateAverageScores = plateFinder.findPlates(
+              boxes, scores, labels)
+          else:
+            print("[ERROR] --pred_stages {}. The number of prediction stages must be either 1 or 2".format(
+              conf["pred_stages"]))
+            quit()
 
           # write annotated video if option is selected
           if conf["saveAnnotatedVideo"] == "true":
             # write the frame plus annotation to the video stream
             videoWriter.writeFrame(videoImage, plateBoxes, charTexts, charBoxes, charScores)
 
-          # find the plates, and find the chars within the plates
-          licensePlateFound, plateBoxes, charTexts, charBoxes, charScores, plateScores = plateFinder.findPlates(boxes, scores, labels, categoryIdx)
-
           # if license plates have been found, then predict the plate text, and add to the history
           if licensePlateFound == True:
-            plateHistory.addPlatesToHistory(charTexts, charBoxes, plateBoxes, image, videoPath, frameCount, plateScores)
+            plateHistory.addPlatesToHistory(charTexts, charBoxes, plateBoxes, image, videoPath, frameCount, plateAverageScores)
             validImages += 1
             firstPlateFound = True
             platesReadyForLog = True
@@ -246,7 +233,6 @@ for videoPath in sorted(myPaths):
         else:
           frameDecCnt += 1
 
-
       # close the video writer and release the stream
       if conf["saveAnnotatedVideo"] == "true":
         videoWriter.closeWriter()
@@ -255,7 +241,7 @@ for videoPath in sorted(myPaths):
       # print some performance statistics
       curTime = time.time()
       processingTime = curTime - start_time
-      frameCountDelta = frameCount - oldFrameCount
+      frameCountDelta = (frameCount - oldFrameCount) / conf["frameDecimationFactor"]
       fps = frameCountDelta / processingTime
       oldFrameCount = frameCount
       print(

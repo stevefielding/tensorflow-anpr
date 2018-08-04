@@ -11,4 +11,7 @@ class Conf:
 
   def __getitem__(self, k):
     # return the value associated with the supplied key
+    val = self.__dict__.get(k, None)
+    if val == None:
+      print("[ERROR] Attempting to get undefined config val conf[\"{}\"]".format(k))
     return self.__dict__.get(k, None)

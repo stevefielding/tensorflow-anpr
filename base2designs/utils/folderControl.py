@@ -6,7 +6,7 @@ class FolderControl:
   def __init__(self):
     self.currentFileNamePrefix = None
 
-  def createDestFolders(self, fileNamePrefix, saveVideoPath, outputImagePath, croppedImagePath, outputVideoPath):
+  def createDestFolders(self, fileNamePrefix, saveVideoPath, outputImagePath, outputVideoPath):
     # if new day then create new directory
     if (fileNamePrefix != self.currentFileNamePrefix):
       saveVideoDir = "{}/{}".format(saveVideoPath, fileNamePrefix)
@@ -25,11 +25,6 @@ class FolderControl:
       annDir = "{}_ann" .format(outputImageDir)
       if (os.path.isdir(annDir) != True):
         os.makedirs(annDir)
-
-      # dir for cropped images of plates
-      croppedImageDir = "{}/{}" .format(croppedImagePath, fileNamePrefix)
-      if (os.path.isdir(croppedImageDir) != True):
-        os.makedirs(croppedImageDir)
 
       # dir for annotated video
       outputVideoDir = "{}/{}" .format(outputVideoPath, fileNamePrefix)
