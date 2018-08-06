@@ -170,22 +170,34 @@ python export_inference_graph.py --input_type image_tensor \
 --trained_checkpoint_prefix ../anpr/experiment_faster_rcnn/2018_06_12/training/model.ckpt-60296 \  
 --output_directory ../anpr/experiment_faster_rcnn/2018_06_12/exported_model
 ````
-###### predict.py
-Back to this project directory to run predict.py
-Test your exported model against an image dataset.
-Prints the detected plate text, and displays the annotated image.
+###### predict_images.py
+Back to this project directory to run predict_images.py
+Test your exported model against an image dataset. Works with single and double stage prediction.
+Prints the detected plate text, and displays the annotated image.  
+pred_stages = 1
 ````
-workon tensorflow  
-python predict.py --model datasets/experiment_faster_rcnn/2018_06_12/exported_model/frozen_inference_graph.pb \  
---labels datasets/records/classes.pbtxt --imagePath images/SJ7STAR_images/2018_05_27 \  
---num-classes 37
+workon tensorflow
+python predict_images.py --model datasets/experiment_faster_rcnn/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+ --pred_stages 1 \
+ --labels datasets/records/classes.pbtxt \
+ --imagePath images/SJ7STAR_images/2018_02_24_9-00 \
+ --num-classes 37 \
+ --image_display True 
 ````
-
-##### predict_video_ssd.py
+pred_stages = 2
+````
+python predict_images.py --model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+ --pred_stages 2 \
+ --labels datasets/records/classes.pbtxt \
+ --imagePath images/SJ7STAR_images/2018_02_24_9-00 \
+ --num-classes 37 \
+ --image_display True 
+````
+##### predict_video.py
 Test your exported model against a video dataset. Uses one or two two stage prediction.
 Outputs an annotated video and a series of still images along with image annotations. The still images are grouped to reduce 
 the output of images with duplicate plates.
-The image annotations can be viewed and edited using labelImg, and then they can be used further enlarge the training dataset.
+The image annotations can be viewed and edited using labelImg, and they can be used to further enlarge the training dataset.
 ````
 python predict_video.py --conf conf/lplates_smallset_ssd.json
 ````
