@@ -1,13 +1,13 @@
 # USAGE
 # Two stage SSD usage
-# python predict_and_score.py --model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
+# python predict_images_and_score.py --model datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb \
 # --labels datasets/records/classes.pbtxt \
 # --annotations_dir images_verification \
 # --num-classes 37 \
 # --min-confidence 0.1 \
 # --pred_stages 2
 # Single stage faster R-CNN usage
-# python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
+# python predict_images_and_score.py --model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
 # --labels datasets/records/classes.pbtxt \
 # --annotations_dir images_verification \
 # --num-classes 37 \

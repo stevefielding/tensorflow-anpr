@@ -201,14 +201,14 @@ The image annotations can be viewed and edited using labelImg, and they can be u
 ````
 python predict_video.py --conf conf/lplates_smallset_ssd.json
 ````
-##### predict_and_score.py
+##### predict_images_and_score.py
 Test a trained model against an annotated dataset. Annotations must be in PASCAL VOC style xml files.
 Run with image_display true if you wish to see each annotated image displayed.
 Can be executed with single or double prediction stages.  
 pred_stages = 1:  
 plates and characters are predicted in a single pass
 ````
-python predict_and_score.py --model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
+python predict_images_and_score.py --model datasets/experiment_faster_rcnn/2018_07_15/exported_model/frozen_inference_graph.pb \
 --labels datasets/records/classes.pbtxt \
 --annotations_dir images_verification \
 --num-classes 37 \
