@@ -8,6 +8,19 @@ The double stage detector detects plates in the first inference stage, crops the
 passes the cropped plate image to the second inference stage, which detects plate characters.   
 The double stage detector uses a single detection model that has been trained to detect plates in full images containing cars/plates, 
 and trained to detect plate text in images containing tightly cropped plate images.  
+##### Performance
+Single stage Faster RCNN:  
+[INFO] Processed 69 frames in 37.62 seconds. Frame rate: 1.83 Hz  
+[INFO] platesWithCharCorrect_recall: 97.1%, platesWithCharCorrect_precision: 97.1%,  
+       plateFrames_recall: 100.0%, plateFrames_precision: 100.0%,  
+       chars_recall: 99.6%, chars_precision: 99.6%  
+Two stage SSD:  
+[INFO] Processed 69 frames in 6.17 seconds. Frame rate: 11.19 Hz  
+[INFO] platesWithCharCorrect_recall: 95.7%, platesWithCharCorrect_precision: 97.1%,  
+       plateFrames_recall: 98.6%, plateFrames_precision: 100.0%,  
+       chars_recall: 98.1%, chars_precision: 99.6%  
+It seems that Faster_RCNN is slightly better than SSD, but the sample size is too small to be sure.  
+
 ##### Object in object
 This two stage technique of using a single model to detect characters within plates could also be used to detect any 
 object within another object. The two stage detector can perform inference faster than the single stage
