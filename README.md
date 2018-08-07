@@ -12,6 +12,27 @@ which detects plate characters.
 ![](https://github.com/stevefielding/tensorflow-anpr/raw/master/uploads/detect_chars.png)   
 The double stage detector uses a single detection model that has been trained to detect plates in full images containing cars/plates, 
 and trained to detect plate text in images containing tightly cropped plate images.  
+##### TF Record files, pre-trained models, and config files
+Download [TF records, models, and config](https://drive.google.com/file/d/1fAafi6V6vtiqAirYNOQJmc6G7FLb4eC6/view?usp=sharing)  
+I have lumped everything together, which is not great for maintainability, but at least you won't have to figure out
+a directory structure and copy the files to the correct locations.  
+You will need a starting point for training. You can either use
+the exported_models (which speeds up training) or you can download ssd_inception_v2_coco_2018_01_28, 
+and faster_rcnn_resnet101_coco_2018_01_28 from the [zoo](https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md)  
+The models should be copied to experiment_ssd/YYYY_MM_DD/training, and experiment_faster_rcnn/YYYY_MM_DD/training  
+In the config files, you will need to modify the paths:
+````
+train_config
+  fine_tune_checkpoint path/to/my/model.ckpt
+train_input_reader
+  tf_record_input_reader
+    input_path path/to/my/train.record
+  label_map_path path/to/my/classes.pbtxt
+train_eval_reader
+  tf_record_input_reader
+    input_path path/to/my/test.record
+  label_map_path path/to/my/classes.pbtxt
+````
 ##### Performance
 Single stage Faster RCNN:  
 [INFO] Processed 69 frames in 37.62 seconds. Frame rate: 1.83 Hz  
@@ -35,6 +56,8 @@ can perform inference at 15 fps on a Titan-X.
 The two stage SSD implementation opens the possibility of running on less powerful hardware, such as Intel 
 i7-4790K CPU @ 4.00GHz with 16GB of RAM (2.9 fps), and Nvidia Jetson TX2 (2.8 fps).
 
+Generating labelled images
+--------------------------
 ##### mturk.html:
 Defines the web interface that will be used by the MTurk workers to label the images.
 Modified from [original](https://github.com/kyamagu/bbox-annotator)
@@ -152,7 +175,8 @@ tensorflow_object_detection_datasets
 └── records
 ````
 
-##### Train the object_detection model
+Train the object_detection model
+--------------------------------
 Now you can use the TFOD API, at tensorflow/models/research/object_detection, to train the model.
 It goes something like this. Assuming python virtualenv called tensorflow, 
 a single GPU for training and CPU for eval:
@@ -196,6 +220,8 @@ python export_inference_graph.py --input_type image_tensor \
 --trained_checkpoint_prefix ../anpr/experiment_faster_rcnn/2018_06_12/training/model.ckpt-60296 \  
 --output_directory ../anpr/experiment_faster_rcnn/2018_06_12/exported_model
 ````
+Testing the trained model
+-------------------------
 ##### predict_images.py
 Back to this project directory to run predict_images.py
 Test your exported model against an image dataset. Works with single and double stage prediction.
