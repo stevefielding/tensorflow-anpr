@@ -7,7 +7,16 @@ The single stage detector, detects plates and plate characters in a single infer
 The double stage detector detects plates in the first inference stage, crops the detected plate from the image, 
 passes the cropped plate image to the second inference stage, which detects plate characters.   
 The double stage detector uses a single detection model that has been trained to detect plates in full images containing cars/plates, 
-and trained to detect plate text in images containing tightly cropped plate images. 
+and trained to detect plate text in images containing tightly cropped plate images.  
+##### Object in object
+This two stage technique of using a single model to detect characters within plates could also be used to detect any 
+object within another object. The two stage detector can perform inference faster than the single stage
+detector, because it can use simpler models such as SSD, rather than Faster RCNN, and it can use a smaller
+image size. For example, two stages of SSD based on Inception_V2, and 1280x960 image size can perform inference at 
+1.8 fps on a Titan-X GPU, whereas, a single stage of Faster RCNN based on Resnet_101, and a resized 300x300 image 
+can perform inference at 15 fps on a Titan-X.  
+The two stage SSD implementation opens the possibility of running on less powerful hardware, such as Intel 
+i7-4790K CPU @ 4.00GHz with 16GB of RAM (2.9 fps), and Nvidia Jetson TX2 (2.8 fps).
 
 ##### mturk.html:
 Defines the web interface that will be used by the MTurk workers to label the images.
@@ -131,7 +140,7 @@ Now you can use the TFOD API, at tensorflow/models/research/object_detection, to
 It goes something like this. Assuming python virtualenv called tensorflow, 
 a single GPU for training and CPU for eval:
 
-###### Training
+##### Training
 ````
 workon tensoflow  
 cd tensorflow/models/research/object_detection
@@ -139,8 +148,8 @@ python train.py --logtostderr \
 --pipeline_config_path ../anpr/experiment_faster_rcnn/2018_06_12/training/faster_rcnn_anpr.config \  
 --train_dir ../anpr/experiment_faster_rcnn/2018_06_12/training
 ````
-###### Eval
-If you are running the eval on CPU, then limit the number of images to evaluate by modifying your config file:  
+##### Eval
+If you are running the eval on a CPU, then limit the number of images to evaluate by modifying your config file:  
 ````
 130 eval_config: {  
 131 num_examples: 5  
@@ -161,7 +170,7 @@ cd tensorflow/models/research
 workon tensoflow  
 tensorboard --logdir anpr/experiment_faster_rcnn  
 ````
-###### Export model
+##### Export model
 ````
 cd tensorflow/models/research/object_detection
 workon tensorflow  
@@ -170,7 +179,7 @@ python export_inference_graph.py --input_type image_tensor \
 --trained_checkpoint_prefix ../anpr/experiment_faster_rcnn/2018_06_12/training/model.ckpt-60296 \  
 --output_directory ../anpr/experiment_faster_rcnn/2018_06_12/exported_model
 ````
-###### predict_images.py
+##### predict_images.py
 Back to this project directory to run predict_images.py
 Test your exported model against an image dataset. Works with single and double stage prediction.
 Prints the detected plate text, and displays the annotated image.  
