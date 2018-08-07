@@ -1,6 +1,6 @@
 Automatic Number (License) Plate Recognition
 ============================================
-![alt text](https://github.com/stevefielding/tensorflow-anpr/demo_video/parkingLotShortClip.gif)
+![](https://github.com/stevefielding/tensorflow-anpr/demo_video/parkingLotShortClip.gif)
 Detect vehicle license plates in videos and images using the tensorflow/object_detection API.  
 Train object detection models for license plate detection using TFOD API, with either a single detection stage
 or a double detection stage.  
