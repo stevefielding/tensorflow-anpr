@@ -1,12 +1,15 @@
 Automatic Number (License) Plate Recognition
 ============================================
-![](https://github.com/stevefielding/tensorflow-anpr/raw/master/demo_video/parkingLotShortClip.gif)
+![](https://github.com/stevefielding/tensorflow-anpr/raw/master/uploads/parkingLotShortClip.gif)  
 Detect vehicle license plates in videos and images using the tensorflow/object_detection API.  
 Train object detection models for license plate detection using TFOD API, with either a single detection stage
 or a double detection stage.  
 The single stage detector, detects plates and plate characters in a single inference stage.  
-The double stage detector detects plates in the first inference stage, crops the detected plate from the image, 
-passes the cropped plate image to the second inference stage, which detects plate characters.   
+The double stage detector detects plates in the first inference stage,  
+![](https://github.com/stevefielding/tensorflow-anpr/raw/master/uploads/detect_plate.png)  
+crops the detected plate from the image, passes the cropped plate image to the second inference stage, 
+which detects plate characters.  
+![](https://github.com/stevefielding/tensorflow-anpr/raw/master/uploads/detect_chars.png)   
 The double stage detector uses a single detection model that has been trained to detect plates in full images containing cars/plates, 
 and trained to detect plate text in images containing tightly cropped plate images.  
 ##### Performance
