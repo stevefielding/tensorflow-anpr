@@ -22,6 +22,14 @@
 # labelled image is optionally displayed.
 # Scores are displayed for plates and chars.
 
+# Example using PyCallGraph. Unfortunately calls to tensorflow session are not visible
+# See https://pycallgraph.readthedocs.io/en/master/index.html
+# pycallgraph --max-depth=3 graphviz -- predict_images_and_score.py
+# --model datasets/experiment_ssd_mobilenet_v1/2018_08_09/exported_model/frozen_inference_graph.pb
+# --labels datasets/records/classes.pbtxt --annotations_dir images_verification --num-classes 37
+# --min-confidence 0.1 --pred_stages 2
+
+
 # import the necessary packages
 import argparse
 
