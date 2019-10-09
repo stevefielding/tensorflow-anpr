@@ -128,13 +128,13 @@ def predictImages(modelArg, labelsArg, imagePathArg, num_classesArg, min_confide
       processingTime = curTime - start_time
       fps = frameCnt / processingTime
       print("[INFO] Processed {} frames in {:.2f} seconds. Frame rate: {:.2f} Hz".format(frameCnt, processingTime, fps))
-      platesReturn = {}
+      platesReturn = []
       for i, plateBox in enumerate(plateBoxes_pred):
         #platesReturn[i] = { 'plateBoxLoc': plateBox, 'plateText': charTexts_pred[i], 'charBoxLocs': charBoxes_pred[i]}
-        platesReturn[i] = { 'plateText': charTexts_pred[i], 'plateBoxLoc': list(plateBox), 'charBoxLocs': list([list(x) for x in charBoxes_pred[i]])}
+        platesReturn.append({ 'plateText': charTexts_pred[i], 'plateBoxLoc': list(plateBox), 'charBoxLocs': list([list(x) for x in charBoxes_pred[i]])})
 
       #results = results.encode('utf-8')
-      return platesReturn
+      return {"numPlates": len(platesReturn), "plates": platesReturn}
 
 if __name__ == '__main__':
   #tf.app.run()
