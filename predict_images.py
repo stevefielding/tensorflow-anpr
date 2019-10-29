@@ -76,6 +76,8 @@ def predictImages(modelArg, labelsArg, imagePathArg, num_classesArg, min_confide
       imagePaths = paths.list_images(imagePathArg)
       frameCnt = 0
       start_time = time.time()
+      platesReturn = []
+      numPlates = 0
       # Loop over all the images
       for imagePath in imagePaths:
         frameCnt += 1
@@ -123,18 +125,23 @@ def predictImages(modelArg, labelsArg, imagePathArg, num_classesArg, min_confide
           cv2.imshow("Labelled Image", imageLabelled)
           cv2.waitKey(0)
 
+
+
+        imageResults = []
+        for i, plateBox in enumerate(plateBoxes_pred):
+          imageResults.append({ 'plateText': charTexts_pred[i], 'plateBoxLoc': list(plateBox), 'charBoxLocs': list([list(x) for x in charBoxes_pred[i]])})
+          numPlates += 1
+
+        platesReturn.append({'imagePath': imagePath.split("/")[-1], 'imageResults': imageResults})
+
       # print some performance statistics
       curTime = time.time()
       processingTime = curTime - start_time
       fps = frameCnt / processingTime
       print("[INFO] Processed {} frames in {:.2f} seconds. Frame rate: {:.2f} Hz".format(frameCnt, processingTime, fps))
-      platesReturn = []
-      for i, plateBox in enumerate(plateBoxes_pred):
-        #platesReturn[i] = { 'plateBoxLoc': plateBox, 'plateText': charTexts_pred[i], 'charBoxLocs': charBoxes_pred[i]}
-        platesReturn.append({ 'plateText': charTexts_pred[i], 'plateBoxLoc': list(plateBox), 'charBoxLocs': list([list(x) for x in charBoxes_pred[i]])})
 
       #results = results.encode('utf-8')
-      return {"numPlates": len(platesReturn), "plates": platesReturn}
+      return {"processingTime": processingTime,  "numPlates": numPlates, "numImages": len(platesReturn), "images": platesReturn}
 
 if __name__ == '__main__':
   #tf.app.run()

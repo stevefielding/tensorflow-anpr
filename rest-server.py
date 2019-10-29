@@ -14,11 +14,15 @@ def upload_render():
 @application.route('/uploader', methods = ['GET', 'POST'])
 def upload_file():
   if request.method == 'POST':
-    f = request.files['file']
-    imageFile = "uploadedImages/" + secure_filename(f.filename)
     shutil.rmtree("uploadedImages")
     os.mkdir("uploadedImages")
-    f.save(imageFile)
+    #f = request.files['file']
+    files = request.files.getlist("file[]")
+    for f in files:
+      #file = request.files.get(f)
+      imageFile = "uploadedImages/" + secure_filename(f.filename)
+      print("Image file: {}".format(imageFile))
+      f.save(imageFile)
     # modelArg, labelsArg, imagePathArg, num_classesArg, min_confidenceArg, image_displayArg, pred_stagesArg
     objectDetectResults = predictImages ("/home/stevefielding_ca/github/tensorflow-anpr/datasets/experiment_ssd/2018_07_25_14-00/exported_model/frozen_inference_graph.pb",
                       "/home/stevefielding_ca/github/tensorflow-anpr/classes/classes.pbtxt",
